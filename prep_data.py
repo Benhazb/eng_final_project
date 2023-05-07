@@ -43,6 +43,7 @@ class prep_data():
         for wav_file in self.clean_data_list:
             self.split_n_stft(wav_file)
 
+
     def extract_noise(self, noise_dir_name):
         noise_paths_list = []
         noise_path = os.path.join(self.data_dir, noise_dir_name)
@@ -80,10 +81,12 @@ class prep_data():
         audio_split_dir_path = f"{self.data_dir}/musicnet/train_data_split/{audio_split_dir_name}"
         if x.dim() > 1:
             x = torch.mean(x, dim=0)
-        num_of_sec = (x.shape[0]-self.samples_per_sect*self.overlap_rate)/(self.samples_per_sect*self.overlap_rate)
+        num_of_sec = (x.shape[0]-self.samples_per_sect)/(self.samples_per_sect*(1-self.overlap_rate)) + 1
         num_of_sec = int(num_of_sec)
         for i in range(num_of_sec):
-            wav_sec = x[int(i * (self.samples_per_sect * self.overlap_rate)):int((i / 2 + 1) * self.samples_per_sect)]
+            start_idx = i * (self.samples_per_sect * (1-self.overlap_rate))
+            end_idx = start_idx + self.samples_per_sect
+            wav_sec = x[int(start_idx):int(end_idx)]
             noise = self.rand_n_prep_noise()
             norm_wav_sec = self.normalize(wav_sec)
             norm_noise = self.normalize(noise)
@@ -104,7 +107,7 @@ class prep_data():
                               normalized=False,
                               onesided=None,
                               return_complex=True)
-        stft_sec_file_name = f"{dir_name}_stft_sec{index}_clean.pickle" #TO DO: check number of windows
+        stft_sec_file_name = f"{dir_name}_stft_sec{index}_clean.pickle"
         stft_sec_path = f"{dir_path}/{stft_sec_file_name}"
         with open(stft_sec_path, 'wb') as file:
             stft_tnzr_sec = stft_sec.detach().cpu()
@@ -148,8 +151,14 @@ class prep_data():
         return noise
 
     def ext_to_sect(self, noise):
+        fade_in = torch.cat((torch.linspace(0, 1, 22050), torch.ones(len(noise)-22050)), dim=0)
+        fade_in = fade_in.to(self.device)
+        fade_in_noise = noise * fade_in
         while(len(noise) < self.samples_per_sect):
-            noise = torch.cat((noise, noise), dim=0)
+            fade_out = torch.cat((torch.ones(len(noise) - 22050), torch.linspace(1, 0, 22050)), dim=0)
+            fade_out = fade_out.to(self.device)
+            noise = noise * fade_out
+            noise = torch.cat((noise[:-22050], noise[-22050:] + fade_in_noise[:22050], fade_in_noise[22050:]), dim=0)
         noise = noise[0:self.samples_per_sect]
         return noise
 
@@ -161,13 +170,14 @@ class prep_data():
         return norm_signal
 
     def reconstuct(self, file_num, seg, snr):
-        with open(f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split/{file_num}/{file_num}_stft_sec{seg}_{snr}.pickle", 'rb') as file:
+        with open(f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split/{file_num}/{file_num}_noise_stft_sec{seg}_{snr}.pickle", 'rb') as file:
             pickle_file = pickle.load(file)
             self.save_as_wav(pickle_file, f"{file_num}_sec{seg}_{snr}.wav")
 
 
     def save_as_wav(self, signal, file_name):
         signal = signal.to(self.device)
+        print(type(signal))
         rec_signal = torch.istft(input=signal,
                                  n_fft=self.wind_size,
                                  hop_length=self.hop,
@@ -181,13 +191,13 @@ class prep_data():
         rec_signal = rec_signal.detach().cpu()
         rec_signal = rec_signal.numpy()
         rec_signal = (rec_signal*32767).astype('int16')
-        wavfile.write(file_name, 44100, rec_signal)
+        wavfile.write(f'/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/{file_name}', 44100, rec_signal)
 
     def add_snrs(self, exmp_list):
         self.noise_list = self.extract_noise('gramophone noise')
         self.noise_index = list(range(0,len(self.noise_list)))
         clean_data = self.extract_clean_data()
-        SNR = ['clean', 'SNR2_db', 'SNR5_db', 'SNR10_db', 'SNR0_db', 'SNR-3_db', 'SNR20_db']
+        SNR = ['SNR3_db', 'SNR6_db', 'SNR9_db', 'SNR0_db', 'SNR-3_db', 'SNR12_db']
         for wav_file in clean_data:
             file_num = wav_file.split('/')[-1].split('.wav')[0]
             if file_num in exmp_list:
@@ -196,13 +206,25 @@ class prep_data():
             for snr in SNR:
                 self.reconstuct(example, 15, snr)
 
+    def rand_val_n_test(self, dest_dir):
+        source_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split/'
+        if not os.path.isdir(dest_dir):
+            os.mkdir(dest_dir)
+        dirs_list = [d for d in os.listdir(source_dir) if os.path.isdir(os.path.join(source_dir, d))]
+        random_dirs = random.sample(dirs_list, 4)
+        print(random_dirs)
+        for dir_name in random_dirs:
+            src = os.path.join(source_dir, dir_name)
+            dst = os.path.join(dest_dir, dir_name)
+            os.rename(src, dst)
+
 
 ############################################
 ##
 ############################################
 if __name__ == "__main__":
     #prep_data_params
-    cuda_num = 1
+    cuda_num = 0
     device = choose_cuda(cuda_num)
     data_base_dir = f"/dsi/scratch/from_netapp/users/hazbanb/dataset"
     n_window = 2048
@@ -211,4 +233,11 @@ if __name__ == "__main__":
     overlap = 0.5 #50% overlap for more data
     data = prep_data(data_base_dir, n_window, hop_size, samples_per_sec, overlap, device)
     data.prep_audio()
+    data.rand_val_n_test('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/val_data_split/')
+    data.rand_val_n_test('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split/')
+
+    #with open(f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split/1733/1733_stft_sec15_clean.pickle", 'rb') as file:
+    #    pickle_file = pickle.load(file)
+    #    data.save_as_wav(pickle_file, f"1733_sec15_clean.wav")
+
 

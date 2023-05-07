@@ -7,7 +7,8 @@ class gen_csv():
         self.root = root
 
     def prep_csv(self):
-        with open('dataset.csv', mode='w', newline='') as file:
+        csv_file = f'{self.root}/dataset.csv'
+        with open(csv_file, mode='w', newline='') as file:
             writer = csv.writer(file)
             first_row = ['relative path', 'SNR']
             writer.writerow(first_row)
@@ -26,6 +27,10 @@ class gen_csv():
                         writer.writerow(curr_row)
 
 if __name__ == "__main__":
-    dir_root = f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split"
-    csv_ins = gen_csv(dir_root)
+    train_root = f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split"
+    csv_ins = gen_csv(train_root)
+    csv_ins.prep_csv()
+    csv_ins.root = f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/val_data_split"
+    csv_ins.prep_csv()
+    csv_ins.root = f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split"
     csv_ins.prep_csv()
