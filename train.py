@@ -12,7 +12,7 @@ from models import AutoEncoder
 from dataset import create_dataset
 
 ### Training function
-def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, optimizer):
+def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, loss_weigh, optimizer):
     # Set train mode for both the encoder and the decoder
     model.train()
     train_loss = {}
@@ -31,8 +31,8 @@ def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, optimi
         clean_abs = torch.abs(clean_seg).to(device)
         coded_clean = model.encoder.forward(clean_abs)
         # Evaluate loss
-        loss_recon = loss_fn(recon_data, clean_abs)
-        loss_codes = loss_fn(coded_clean, coded_noisy)
+        loss_recon = loss_fn(recon_data, clean_abs) * loss_weigh[0]
+        loss_codes = loss_fn(coded_clean, coded_noisy) * loss_weigh[1]
         # Backward pass
         loss_total = loss_recon + loss_codes
         loss_total.backward()
@@ -67,7 +67,7 @@ def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, optimi
             val_loss['loss_cod'].append(loss_codes.item())
             val_loss['loss_tot'].append(loss_total.item())
         for loss in val_loss.keys():
-            val_loss[loss] = sum(val_loss[loss]) / len(val_dataloader)
+            val_loss[loss] = sum(val_loss[loss]) / len(val_loss[loss])
     return train_loss, val_loss
 
 def outputs(path, loss_values, batch_size, name):
@@ -131,7 +131,8 @@ if __name__ == "__main__":
     cuda_num = 0
     batch_size = 128
     num_workers = 9
-    #add lambda
+    lambda1 = 0.5
+    lambda2 = 10000
 
     # create train dataloader
     snrs = ['6', '9', '12']
@@ -165,7 +166,7 @@ if __name__ == "__main__":
     loss_dict['train'] = []
     loss_dict['val'] = []
     for epoch in range(num_epochs):
-        train_loss, val_loss = train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, optim)
+        train_loss, val_loss = train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, [lambda1, lambda2], optim)
         loss_dict['epoch'].append(epoch)
         loss_dict['train'].append(train_loss)
         loss_dict['val'].append(val_loss)

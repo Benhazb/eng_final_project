@@ -16,9 +16,10 @@ def test(model, device, test_dataloader, loss_fn):
     with torch.no_grad():
         for batch_idx, all_data in enumerate(test_dataloader):
             clean_seg, noise, _ = all_data
-            clean_abs = torch.abs(clean_seg).to(device)
+            clean_seg = clean_seg.to(device)
             noise = noise.to(device)
-            noised_signal_abs = torch.abs(clean_abs + noise)
+            noised_signal_abs = torch.abs(clean_seg + noise)
+            clean_abs = torch.abs(clean_seg).to(device)
             coded_noisy,recon_data = model(noised_signal_abs)
             coded_clean = model.encoder.forward(clean_abs)
             # Evaluate loss
@@ -29,7 +30,7 @@ def test(model, device, test_dataloader, loss_fn):
             test_loss['loss_cod'].append(loss_codes.item())
             test_loss['loss_tot'].append(loss_total.item())
         for loss in test_loss.keys():
-            test_loss[loss] = sum(test_loss[loss]) / len(test_dataloader)
+            test_loss[loss] = sum(test_loss[loss]) / len(test_loss[loss])
     return test_loss
 
 def back_to_wav(model, device, recon_dataloader, run_dir):
@@ -97,4 +98,4 @@ if __name__ == "__main__":
     recon_dataset.filter_by_snrs(snrs)
     recon_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
                                                   num_workers=num_workers)
-    back_to_wav(model, device, recon_dataloader, run_dir)
+    #back_to_wav(model, device, recon_dataloader, run_dir)
