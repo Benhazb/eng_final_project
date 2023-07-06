@@ -35,7 +35,7 @@ class create_dataset():
             clean_data = pickle.load(handle)
         with open(noise_fpath, 'rb') as handle:
             noise_data = pickle.load(handle)
-        return clean_data.unsqueeze(0), noise_data.unsqueeze(0), snr
+        return clean_data, noise_data, snr
 
 def test_num_workers(dataset_mode):
     print(f"mp.cpu_count():{mp.cpu_count()}")

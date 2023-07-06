@@ -117,8 +117,8 @@ class prep_data():
         Ps = torch.mean(norm_wav ** 2)
         Pn = torch.mean(norm_noise ** 2)
         SNR = 10 * torch.log10(Ps/Pn)
-        ratio = 10 ** ((SNR-snr)/10)
-        noise_snr = ratio * norm_noise
+        a = 10 ** ((SNR-snr)/20)
+        noise_snr = a * norm_noise
         stft_sec = torch.stft(input=noise_snr,
                               n_fft=self.wind_size,
                               hop_length=self.hop,
@@ -163,8 +163,8 @@ class prep_data():
         return noise
 
     def normalize(self, signal):
-        signal_max = abs(signal.max())
-        centered_signal = signal - signal.mean()
+        signal_max = torch.max(torch.abs(signal))
+        centered_signal = signal - torch.mean(signal)
         norm_signal = centered_signal/signal_max
         norm_signal = 0.98 * norm_signal
         return norm_signal
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     data_base_dir = f"/dsi/scratch/from_netapp/users/hazbanb/dataset"
     n_window = 2048
     hop_size = 1024
-    samples_per_sec = 220160 #~5 sec
+    samples_per_sec = 219136 #~5 sec
     overlap = 0.5 #50% overlap for more data
     data = prep_data(data_base_dir, n_window, hop_size, samples_per_sec, overlap, device)
     data.prep_audio()
