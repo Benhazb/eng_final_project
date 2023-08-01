@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-from prep_data import choose_cuda
-import time
 
 class AutoEncoder(nn.Module):
     def __init__(self, d=1024):
