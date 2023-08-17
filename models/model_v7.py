@@ -7,7 +7,7 @@ from torch import nn
 class Model(nn.Module):
     def __init__(self, depth, Ns, activation):
         super().__init__()
-        print('model_v6')
+        print('model_v7')
         self.activation = activation
         self.depth = depth
         self.Ns = Ns
@@ -76,8 +76,8 @@ class Model(nn.Module):
     def forward(self, x):
         F_in_1 = self.conv2d_1(x)
         F_out_1 = self.unet_1(F_in_1)
-        est_noise = self.conv2d_2(F_out_1)
-        Y1 = torch.add(x, est_noise)
+        est_noise1 = self.conv2d_2(F_out_1)
+        Y1 = torch.add(x, est_noise1)
         M0 = self.conv2d_4(F_out_1)
         M1 = self.conv2d_3(Y1)
         M1 = torch.sigmoid(M1)
@@ -85,8 +85,9 @@ class Model(nn.Module):
         F_sam = torch.add(M, F_out_1)
         F_in_2 = torch.concat([F_sam,F_in_1], dim=1)
         F_out_2 = self.unet_2(F_in_2)
-        Y2 = self.conv2d_5(F_out_2)
-        return Y1, Y2, est_noise
+        est_noise2 = self.conv2d_5(F_out_2)
+        Y2 = torch.add(x, est_noise2)
+        return Y1, Y2, est_noise1, est_noise2
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):

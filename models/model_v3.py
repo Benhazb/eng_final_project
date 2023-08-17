@@ -1,6 +1,7 @@
 import math
 from torchinfo import summary
 from prep_data import choose_cuda
+import torchvision.transforms.functional as func
 import torch
 from torch import nn
 
@@ -22,8 +23,7 @@ class AutoEncoder(nn.Module):
                                 stride=1,
                                 padding=self.paddings_1,
                                 padding_mode='reflect'),
-                            self.activation
-        )
+                            self.activation)
 
         self.encoder_s1=Encoder(self.depth, self.activation, self.Ns, self.Ss, self.num_tfc)
         self.decoder_s1=Decoder(self.depth, self.activation, self.Ns, self.Ss, self.num_tfc)
@@ -67,7 +67,6 @@ class Encoder(nn.Module):
                                             num_tfc=self.num_tfc))
 
             self.i_block = I_Block(self.Ns[self.depth], self.Ns[self.depth], self.activation, self.num_tfc)
-            # self.i_block = I_Block(self.Ns[0], self.Ns[0], self.activation, self.num_tfc)
         def forward(self, x):
             for i in range(self.depth):
                 x, x_contract = self.eblocks[i](x)
@@ -106,16 +105,16 @@ class E_Block(nn.Module):
         self.num_tfc = num_tfc
         self.i_block = I_Block(N0, N0, activation, num_tfc)
 
-        ksize = (S[0]+3, S[1]+3)
-        self.paddings_2 = get_paddings(ksize)
-        self.conv2d_2 = nn.Sequential(
-                            nn.Conv2d(in_channels=N0,
-                                out_channels=N,
-                                kernel_size=ksize,
-                                stride=S,
-                                padding=self.paddings_2,
-                                padding_mode='reflect'),
-                            self.activation)
+        # ksize = (S[0]+3, S[1]+3)
+        # self.paddings_2 = get_paddings(ksize)
+        # self.conv2d_2 = nn.Sequential(
+        #                     nn.Conv2d(in_channels=N0,
+        #                         out_channels=N,
+        #                         kernel_size=ksize,
+        #                         stride=S,
+        #                         padding=self.paddings_2,
+        #                         padding_mode='reflect'),
+        #                     self.activation)
 
         # ksize = (S[0] + 2, S[1] + 2)
         # self.conv2d_2 = nn.Sequential(
@@ -125,6 +124,7 @@ class E_Block(nn.Module):
         #               stride=S),
         #     self.activation)
 
+        ksize = (S[0] + 2, S[1] + 2)
         self.pool = nn.Sequential(
             nn.MaxPool2d(kernel_size=ksize, stride=S),
             nn.Conv2d(in_channels=N0, out_channels=N, kernel_size=1, stride=1)
@@ -132,11 +132,10 @@ class E_Block(nn.Module):
 
     def forward(self, x):
         x = self.i_block(x)
-        x_down = self.conv2d_2(x)
+        # x_down = self.conv2d_2(x)
         # x_pad = nn.functional.pad(x, self.paddings_2, mode='constant')
         x_down1 = self.pool(x)
-        # print(f'{x_down1.shape=}')
-        return x_down, x
+        return x_down1, x
 
 class D_Block(nn.Module):
     def __init__(self, N0, N, S, activation, num_tfc):
@@ -147,24 +146,24 @@ class D_Block(nn.Module):
         self.activation = activation
         self.num_tfc = num_tfc
 
-        ksize = (S[0] + 3, S[1] + 3)
-        self.paddings_1 = get_paddings(ksize)
-        self.tconv_1 = nn.Sequential(
-                        nn.ConvTranspose2d(in_channels=N0,
-                                        out_channels=N,
-                                        kernel_size=ksize,
-                                        stride=S,
-                                        padding=self.paddings_1,
-                                        padding_mode='zeros'),
-                        self.activation)
-
-        # ksize = (S[0]+2, S[1]+2)
+        # ksize = (S[0] + 3, S[1] + 3)
+        # self.paddings_1 = get_paddings(ksize)
         # self.tconv_1 = nn.Sequential(
         #                 nn.ConvTranspose2d(in_channels=N0,
         #                                 out_channels=N,
         #                                 kernel_size=ksize,
-        #                                 stride=S),
+        #                                 stride=S,
+        #                                 padding=self.paddings_1,
+        #                                 padding_mode='zeros'),
         #                 self.activation)
+
+        ksize = (S[0]+2, S[1]+2)
+        self.tconv_1 = nn.Sequential(
+                        nn.ConvTranspose2d(in_channels=N0,
+                                        out_channels=N,
+                                        kernel_size=ksize,
+                                        stride=S),
+                        self.activation)
 
         self.projection = nn.Sequential(
                             nn.Conv2d(in_channels=N0,
@@ -176,35 +175,20 @@ class D_Block(nn.Module):
     def upsampling(self, input):
         return nn.functional.interpolate(input, scale_factor=2, mode='bilinear', align_corners=False)
 
-    def padadd(self, x1, x2):
-        x1_shape = x1.shape
-        x2_shape = x2.shape
-        height_diff = (x1_shape[2] - x2_shape[2])
-        width_diff = (x1_shape[3] - x2_shape[3])
-        pad = (math.floor(width_diff/2), math.ceil(width_diff/2), math.floor(height_diff/2), math.ceil(height_diff/2))
-        x2_pad = nn.functional.pad(x2, pad,"constant",0)
-        return torch.add(x2_pad, x1)
-
-    def cropconcat(self, x, bridge):
-        x_shape = x.shape
-        bridge_shape = bridge.shape
-        height_diff = (x_shape[2] - bridge_shape[2]) // 2
-        width_diff = (x_shape[3] - bridge_shape[3]) // 2
-        x_cropped = x[:, :,
-                        height_diff: (bridge_shape[2] + height_diff),
-                        width_diff: (bridge_shape[3] + width_diff)]
-        return torch.concat([x_cropped, bridge], dim=1)
 
     def forward(self, x, bridge):
         x1 = self.tconv_1(x)
         x2 = self.upsampling(x)
         if x2.shape[1]!=x1.shape[1]:
             x2= self.projection(x2)
-        if((x1.shape[2] >= x2.shape[2]) and (x1.shape[3] >= x2.shape[3])):
-            x = self.padadd(x1, x2)
-        else:
-            x = self.padadd(x2,x1)
-        x = self.cropconcat(x, bridge)  # original
+        # if((x1.shape[2] >= x2.shape[2]) and (x1.shape[3] >= x2.shape[3])):
+        #     x2 = func.resize(x2, size=x1.shape[2:])
+        # else:
+        #     x1 = func.resize(x1, size=x2.shape[2:])
+        # x = torch.add(x1, x2)
+        if(x2.shape != bridge.shape):
+            x = func.resize(x2, size=bridge.shape[2:])
+        x = torch.concat([x, bridge], dim=1)
         x = self.i_block(x)
         return x
 
@@ -311,16 +295,6 @@ if __name__ == "__main__":
 
         optim.step()
 
-
-    # # --- Print model summary ---
-    print(f"\n")
-
-    col_names = ["input_size", "output_size", "num_params"]
-    with torch.cuda.device(device):
-        summary(model, input_size=[8,2,1025,215], col_names=col_names)  # set input_size to tuple for [audio, video]
-    print("model_v2")
-    print(math.floor(1/2))
-    print(math.ceil(1/2))
 
 
 

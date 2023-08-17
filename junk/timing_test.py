@@ -5,12 +5,14 @@ import matplotlib.pyplot as plt
 import torch
 #torch.autograd.set_detect_anomaly(True)
 import datetime
+import time
+import sys
 from torch import nn
 from prep_data import choose_cuda
-import sys
 sys.path.append('/home/dsi/hazbanb/project/git/models')
 from model_v5 import Model
 from dataset import create_dataset
+
 
 ### Training function
 def train_epoch(model, device, train_dataloader, loss_fn, optimizer, short_run):
@@ -20,6 +22,8 @@ def train_epoch(model, device, train_dataloader, loss_fn, optimizer, short_run):
     # Iterate the dataloader (we do not need the label values, this is unsupervised learning)
     for batch_idx, all_data in enumerate(train_dataloader):
         clean_seg, noise, dataset_snr = all_data
+
+        start_time_train_to_device = time.time()
 
         # Move tensor to the proper device
         clean_seg = clean_seg.to(device)
@@ -35,7 +39,11 @@ def train_epoch(model, device, train_dataloader, loss_fn, optimizer, short_run):
 
         optimizer.zero_grad()
 
+        start_time_train_model = time.time()
         filtered_signal = model(noised_signal_clone)
+        end_time_train_model = time.time()
+        execution_time_train_model = end_time_train_model - start_time_train_model
+        print("execution_time_train_model:", execution_time_train_model, "seconds")
         filtered_signal = torch.permute(filtered_signal, (0,2,3,1))
         filtered_signal = filtered_signal.contiguous()  # Ensure contiguous memory layout
         filtered_signal = torch.view_as_complex(filtered_signal)
@@ -44,9 +52,18 @@ def train_epoch(model, device, train_dataloader, loss_fn, optimizer, short_run):
         clean_seg_abs = torch.abs(clean_seg)
 
         loss_batch = loss_fn(recon_clean_abs, clean_seg_abs)
-
+        start_time_train_backward = time.time()
         loss_batch.backward()
+        end_time_train_backward = time.time()
+        execution_time_train_backward = end_time_train_backward - start_time_train_backward
+        print("execution_time_train_backward:", execution_time_train_backward, "seconds")
+
+        start_time_train_optimizer = time.time()
         optimizer.step()
+        end_time_train_optimizer = time.time()
+        execution_time_train_optimizer = end_time_train_optimizer - start_time_train_optimizer
+        print("execution_time_train_optimizer:", execution_time_train_optimizer, "seconds")
+
         batch_loss_list.append(loss_batch.item())
         # short run
         if (batch_idx%1000 == 0):
@@ -63,7 +80,6 @@ def val_epoch(model, device, val_dataloader, loss_fn, short_run):
     with torch.no_grad():
         for batch_idx, all_data in enumerate(val_dataloader):
             clean_seg, noise, dataset_snr = all_data
-
             # Move tensor to the proper device
             clean_seg = clean_seg.to(device)
             noise = noise.to(device)
@@ -179,19 +195,19 @@ def save_model(model, optim, epoch_num, batch_size, full_path):
 
 
 if __name__ == "__main__":
-    num_epochs = 30
+    start_time_total = time.time()
+    num_epochs = 1
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
     cuda_num = 3
-    batch_size = 8
+    batch_size = 16
     val_batch_size = 32
     num_workers = 9
-    unet_depth = 1
+    unet_depth = 5
     activation = nn.ELU()
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
     Ss = [(2, 2), (2, 2), (2, 2), (2, 2), (2, 2), (2, 2)]
-    num_tfc = 3
     snrs = ['-3','0','3','6','9','12','15']
 
 
@@ -203,15 +219,20 @@ if __name__ == "__main__":
 
 
     # flags
-    short_run = 0
+    short_run = 1
     check_points = 1
 
     # create train dataloader
     train_dataset = create_dataset('train')
     train_dataset.filter_by_snrs(snrs)
-    print(len(train_dataset))
+
+    start_time_num = time.time()
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=num_workers)
+    print(f'dataloader {len(train_dataloader)}')
+    end_time_num = time.time()
+    execution_time_num = end_time_num - start_time_num
+    print("execution_time:", execution_time_num, "seconds" )
 
     val_dataloader_dict = {}
     for snr in snrs:
@@ -221,7 +242,7 @@ if __name__ == "__main__":
                                                      shuffle=True, num_workers=num_workers)
         val_dataloader_dict[snr] = val_dataloader
 
-
+    start_time_test_dataloader = time.time()
     test_dataloader_dict = {}
     for snr in snrs:
         test_dataset = create_dataset('test')
@@ -229,6 +250,9 @@ if __name__ == "__main__":
         test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size,
                                                       shuffle=True, num_workers=num_workers)
         test_dataloader_dict[snr] = test_dataloader
+    end_time_test_dataloader = time.time()
+    execution_time_test_dataloader = end_time_test_dataloader - start_time_test_dataloader
+    print("execution_time_test_dataloader:", execution_time_test_dataloader, "seconds")
 
     ### Define the loss function
     loss_fn = torch.nn.MSELoss()
@@ -244,15 +268,30 @@ if __name__ == "__main__":
     epoch_train_losses = []
     epoch_val_losses = {}
     test_losses = {}
+
     for epoch in range(num_epochs):
+        start_time_train_epoch = time.time()
         epoch_train_loss = train_epoch(model, device, train_dataloader, loss_fn, optim, short_run)
+        end_time_train_epoch = time.time()
+        execution_time_train_epoch = end_time_train_epoch - start_time_train_epoch
+        print("execution_time_train_epoch:", execution_time_train_epoch, "seconds")
+
+        start_time_train_epoch_append = time.time()
         epoch_train_losses.append(epoch_train_loss)
+        end_time_train_epoch_append = time.time()
+        execution_time_train_epoch_append = end_time_train_epoch_append - start_time_train_epoch_append
+        print("execution_time_train_epoch_append:", execution_time_train_epoch_append, "seconds")
+
         print(f'epoch num {str(epoch)}:\t{epoch_train_loss=}')
         for val_dataloader in val_dataloader_dict.keys():
             if epoch == 0:
                 epoch_val_losses[val_dataloader] = []
+            start_time_val_epoch = time.time()
             epoch_val_loss = val_epoch(model, device, val_dataloader_dict[val_dataloader], loss_fn, short_run)
             epoch_val_losses[val_dataloader].append(epoch_val_loss)
+            end_time_val_epoch = time.time()
+            execution_time_val_epoch = end_time_val_epoch - start_time_val_epoch
+            print("execution_time_val_epoch:", execution_time_val_epoch, "seconds")
         if ((epoch+1)%5) == 0 and check_points:
             path = f'{full_path}/{epoch+1}_epochs_checkpoint'
             save_model(model, optim, num_epochs, batch_size, path)
@@ -260,11 +299,17 @@ if __name__ == "__main__":
 
     for test_dataloader in test_dataloader_dict.keys():
         test_losses[test_dataloader] = []
+        start_time_test_epoch = time.time()
         test_loss = val_epoch(model, device, test_dataloader_dict[test_dataloader], loss_fn, short_run)
         test_losses[test_dataloader].append(test_loss)
+        end_time_test_epoch = time.time()
+        execution_time_test_epoch = end_time_test_epoch - start_time_test_epoch
+        print("execution_time_test_epoch:", execution_time_test_epoch, "seconds")
 
-    outputs(full_path, epoch_train_losses, epoch_val_losses, test_losses, batch_size, model, optim)
-
+    #outputs(full_path, epoch_train_losses, epoch_val_losses, test_losses, batch_size, model, optim)
+    end_time_total = time.time()
+    execution_time_total = end_time_total-start_time_total
+    print("execution_time_total:", execution_time_total, "seconds")
 
 
 

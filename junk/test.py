@@ -4,7 +4,7 @@ from prep_data import choose_cuda
 
 import sys
 sys.path.append('/home/dsi/hazbanb/project/git/models')
-from model_v5 import Model
+from model_v6 import Model
 
 from torch import nn
 from reconstruction import Reconstruct
@@ -130,17 +130,15 @@ def back_to_wav(model, device, recon_dataloader, run_dir, tar_name):
 if __name__ == "__main__":
     d = 1024
     cuda_num = 1
-    batch_size = 128
-    num_workers = 9
 
     #model_v4
-    unet_depth = 1
+    unet_depth = 6
     activation = nn.ELU()
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
 
     model = Model(unet_depth, Ns, activation)
 
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/2023-06-29 17:36:49.759766_densenet_model_30epochs_depth_16channels_batch8'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/2023-07-29 15:52:32.629852_2_level_unet_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     checkpoint = torch.load(os.path.join(run_dir, tar_name))
     model.load_state_dict(checkpoint['model'])

@@ -12,16 +12,17 @@ from models import AutoEncoder
 from dataset import create_dataset
 
 ### Training function
-def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, loss_weigh, optimizer):
+def train_epoch(model, device, train_dataloader, loss_fn, loss_weigh, optimizer):
     # Set train mode for both the encoder and the decoder
     model.train()
     train_loss = {}
     train_loss['loss_rec'] = []
     train_loss['loss_cod'] = []
     train_loss['loss_tot'] = []
+    train_loss['snr_improv'] = []
     # Iterate the dataloader (we do not need the label values, this is unsupervised learning)
     for batch_idx, all_data in enumerate(train_dataloader):
-        clean_seg, noise, _ = all_data
+        clean_seg, noise, dataset_snr = all_data
         # Move tensor to the proper device
         optimizer.zero_grad()
         clean_seg = clean_seg.to(device)
@@ -43,8 +44,22 @@ def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, loss_w
         # Print batch loss
         #if batch_idx % 1 == 0:
         #    print('partial train loss (single batch): %f' % loss.data)
+        SNR_in  = 10 * torch.log10(torch.mean(clean_abs ** 2, dim=(2, 3)) / torch.mean((torch.abs(noise)) ** 2, dim=(2, 3)))
+        SNR_out = 10 * torch.log10(torch.mean(clean_abs ** 2, dim=(2, 3)) / torch.mean((recon_data - clean_abs) ** 2, dim=(2, 3)))
+        #SNR_in  = 10 * torch.log10(torch.mean(torch.sqrt(clean_abs), dim=(2, 3)) / torch.mean(torch.sqrt(torch.abs(noise)), dim=(2, 3)))
+        #SNR_out = 10 * torch.log10(torch.mean(clean_abs ** 2, dim=(2, 3)) / torch.mean((recon_data - clean_abs) ** 2, dim=(2, 3)))
+        print(SNR_in.shape)
+        print(SNR_in)
+        print(dataset_snr)
+        print(SNR_out.shape)
+        SNR_improve = torch.mean(SNR_out - SNR_in)
+        print(SNR_improve.shape)
+        train_loss['snr_improv'].append(SNR_improve)
     for loss in train_loss.keys():
         train_loss[loss] = sum(train_loss[loss])/len(train_loss[loss])
+    return train_loss
+
+def val_epoch(model, device, val_dataloader, loss_fn, loss_weigh):
     # validation
     val_loss = {}
     val_loss['loss_rec'] = []
@@ -53,15 +68,16 @@ def train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, loss_w
     model.eval()
     with torch.no_grad():
         for batch_idx, all_data in enumerate(val_dataloader):
-            clean_seg, noise, _ = all_data
-            clean_abs = torch.abs(clean_seg).to(device)
+            clean_seg, noise, snr = all_data
+            clean_seg = clean_seg.to(device)
             noise = noise.to(device)
-            noised_signal_abs = torch.abs(clean_abs + noise)
+            noised_signal_abs = torch.abs(clean_seg + noise)
             coded_noisy,recon_data = model(noised_signal_abs)
+            clean_abs = torch.abs(clean_seg).to(device)
             coded_clean = model.encoder.forward(clean_abs)
             # Evaluate loss
-            loss_recon = loss_fn(recon_data, clean_abs)
-            loss_codes = loss_fn(coded_clean, coded_noisy)
+            loss_recon = loss_fn(recon_data, clean_abs) * loss_weigh[0]
+            loss_codes = loss_fn(coded_clean, coded_noisy) * loss_weigh[1]
             loss_total = loss_recon + loss_codes
             val_loss['loss_rec'].append(loss_recon.item())
             val_loss['loss_cod'].append(loss_codes.item())
@@ -82,6 +98,7 @@ def outputs(path, loss_values, batch_size, name):
         train_loss_tot_col = ['train_loss_tot']
         train_loss_rec_col = ['train_loss_rec']
         train_loss_cod_col = ['train_loss_cod']
+        snr_improve_col = ['SNR_improvement']
         val_loss_tot_col = ['val_loss_tot']
         val_loss_rec_col = ['val_loss_rec']
         val_loss_cod_col = ['val_loss_cod']
@@ -95,6 +112,8 @@ def outputs(path, loss_values, batch_size, name):
                             train_loss_rec_col.append(loss_values[key][i]['loss_rec'])
                         elif loss == 'loss_cod':
                             train_loss_cod_col.append(loss_values[key][i]['loss_cod'])
+                        elif loss == 'snr_improv':
+                            snr_improve_col.append(loss_values[key][i]['snr_improv'])
                 elif key == 'val':
                     for loss in loss_values[key][i].keys():
                         if loss == 'loss_tot':
@@ -114,7 +133,7 @@ def outputs(path, loss_values, batch_size, name):
         ax.legend()
         fig.savefig(png_full_path)
 
-        data = [epoch_col, train_loss_tot_col, train_loss_rec_col, train_loss_cod_col, val_loss_tot_col, val_loss_rec_col, val_loss_cod_col]
+        data = [epoch_col, train_loss_tot_col, train_loss_rec_col, train_loss_cod_col, val_loss_tot_col, val_loss_rec_col, val_loss_cod_col, snr_improve_col]
         data_transposed = zip(*data)
         for row in data_transposed:
             writer.writerow(row)
@@ -133,23 +152,22 @@ if __name__ == "__main__":
     num_workers = 9
     lambda1 = 0.5
     lambda2 = 10000
+    lambd = [lambda1, lambda2]
 
     # create train dataloader
-    snrs = ['6', '9', '12']
+    snrs = ['6']
     train_dataset = create_dataset('train')
     train_dataset.filter_by_snrs(snrs)
     print(len(train_dataset))
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
     # create validation dataloader
-    val_dataset = create_dataset('val')
-    val_dataset.filter_by_snrs(snrs)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-
-    # create test dataloader
-    test_dataset = create_dataset('test')
-    test_dataset.filter_by_snrs(snrs)
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_dataset_snrs = []
+    batch_size = 32
+    for snr in snrs:
+        val_dataset = create_dataset('val')
+        val_dataset.filter_by_snrs(snr)
+        val_dataset_snrs.append(val_dataset)
 
     ### Define the loss function
     loss_fn = torch.nn.MSELoss()
@@ -166,9 +184,13 @@ if __name__ == "__main__":
     loss_dict['train'] = []
     loss_dict['val'] = []
     for epoch in range(num_epochs):
-        train_loss, val_loss = train_epoch(model, device, train_dataloader, val_dataloader, loss_fn, [lambda1, lambda2], optim)
         loss_dict['epoch'].append(epoch)
+        train_loss = train_epoch(model, device, train_dataloader, loss_fn, lambd, optim)
         loss_dict['train'].append(train_loss)
+        for val_dataset in val_dataset_snrs:
+            val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True,
+                                                         num_workers=num_workers)
+            val_loss = val_epoch(model, device, val_dataloader, loss_fn, lambd)
         loss_dict['val'].append(val_loss)
         print(f'epoch num {str(epoch)}:\t{train_loss["loss_tot"]=}\t{val_loss["loss_tot"]=}')
 
