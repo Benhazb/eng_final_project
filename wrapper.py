@@ -2,7 +2,7 @@ import torch
 from prep_data import choose_cuda
 import torchaudio
 import sys
-sys.path.append('/home/dsi/peryyuv/proj/git/models')
+sys.path.append('/home/dsi/hazbanb/project/git/models')
 import model_v6
 import model_v4
 import model_v7
@@ -26,12 +26,9 @@ class wrapper():
         self.seg_list = []
         self.gen_model(unet_depth, Ns, self.activation)
 
-    # def prep_n_trans_to_net(self):
-    #     self.split_n_stft(self.input)
-
     def split_n_stft(self):
-        x, fs = torchaudio.load(self.input)
-        x = x.to(self.device)
+        self.x, fs = torchaudio.load(self.input)
+        x = self.x.to(self.device)
         if x.dim() > 1:
             x = torch.mean(x, dim=0)
         num_of_sec = (x.shape[0]-self.samples_per_seg)/(self.samples_per_seg*(1-self.overlap)) + 1
@@ -52,11 +49,6 @@ class wrapper():
                                   onesided=None,
                                   return_complex=True)
             self.seg_list.append(stft_sec)
-            # seg_phase = torch.angle(stft_sec)
-            # post_net_seg = self.send_to_net(abs(stft_sec))
-            # rec_seg = post_net_seg + seg_phase
-
-
 
     def normalize(self, signal):
         signal_max = abs(signal.max())
@@ -68,7 +60,7 @@ class wrapper():
     def gen_model(self, unet_depth, Ns, activation):
         if "2_level_unet_nc" in self.arch_name:
             self.model = model_v6.Model(unet_depth, Ns, activation)
-        elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name):
+        elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name) or ("2_level_unet_cc" in self.arch_name):
             self.model = model_v7.Model(unet_depth, Ns, activation)
         else:
             self.model = model_v4.Model(unet_depth, Ns, activation)
@@ -77,11 +69,12 @@ class wrapper():
         # move model to device
         self.model.to(self.device)
 
-    def throw_the_model(self):
+    def through_the_model(self):
         reconstruct = Reconstruct(self.device)
         with torch.no_grad():
             for idx, noise_segment in enumerate(self.seg_list):
-                noise_segment = noise_segment.unsqueeze(0).to(self.device)
+                noise_segment = noise_segment.to(self.device)
+                noise_segment = noise_segment.unsqueeze(0)
                 noise_segment = torch.view_as_real(noise_segment)
                 noise_segment = torch.permute(noise_segment, (0, 3, 1, 2))
                 if "2_level_unet_nc" in self.arch_name:
@@ -96,9 +89,9 @@ class wrapper():
                     y1 = torch.view_as_complex(y1)
                     y2 = torch.view_as_complex(y2)
                     est_noise = torch.view_as_complex(est_noise)
-                    recon_wav_y1 = reconstruct.istft_recon(y1)
-                    recon_wav_y2 = reconstruct.istft_recon(y2)
-                    recon_wav_est_noise = reconstruct.istft_recon(est_noise)
+                    recon_wav_y1 = reconstruct.istft_recon(y1).squeeze(0)
+                    recon_wav_y2 = reconstruct.istft_recon(y2).squeeze(0)
+                    recon_wav_est_noise = reconstruct.istft_recon(est_noise).squeeze(0)
                     if idx == 0:
                         y1_final = recon_wav_y1
                         y2_final = recon_wav_y2
@@ -107,16 +100,22 @@ class wrapper():
                         y1_final = torch.cat((y1_final, recon_wav_y1[109568:]), dim=0)
                         y2_final = torch.cat((y2_final, recon_wav_y2[109568:]), dim=0)
                         n1_final = torch.cat((n1_final, recon_wav_est_noise[109568:]), dim=0)
-                    if idx == len(self.seg_list):
+                    if idx == (len(self.seg_list)-1):
+                        y1_final = y1_final.detach().cpu()
+                        y2_final = y2_final.detach().cpu()
+                        n1_final = n1_final.detach().cpu()
 
-                        recon_y1_final = recon_y1_final.detach().cpu()
-                        recon_y2_final = recon_y2_final.detach().cpu()
-                        recon_n1_final = recon_n1_final.detach().cpu()
+                        y1_final = y1_final.unsqueeze(0)
+                        y2_final = y2_final.unsqueeze(0)
+                        n1_final = n1_final.unsqueeze(0)
 
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y1.wav', recon_y1_final, 44100)
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y2.wav', recon_y2_final, 44100)
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/n1.wav', recon_n1_final, 44100)
+                        print(y1_final.shape)
+                        print(self.x.shape)
 
+                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/clean.wav', self.x, 44100)
+                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y1.wav', y1_final, 44100)
+                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y2.wav', y2_final, 44100)
+                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/n1.wav', n1_final, 44100)
 
 
 if __name__ == "__main__":
@@ -136,6 +135,5 @@ if __name__ == "__main__":
     input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1759.wav'
     wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device)
     wrap.split_n_stft()
-    wrap.throw_the_model()
+    wrap.through_the_model()
     full_segmented_song = wrap.seg_list
-    print(full_segmented_song[1].size())
