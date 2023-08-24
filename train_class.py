@@ -34,7 +34,7 @@ class TrainClass:
             self.model = model_v6.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
         elif 'one_level_unet' in self.arch_name:
             self.model = model_v4.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
-        elif ('2_level_unet_nn' in self.arch_name) or ('2_level_unet_2n2c' in self.arch_name):
+        elif ('2_level_unet_nn' in self.arch_name) or ('2_level_unet_2n2c' in self.arch_name) or ('2_level_unet_cc' in self.arch_name):
             self.model = model_v7.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-05)
         self.short_run = short_run
@@ -138,19 +138,11 @@ class TrainClass:
             noise_abs = torch.abs(noise)
 
             if '2_level_unet_nc' in self.arch_name:
-                # y1, y2, _ = self.model(noised_signal_clone)
-                # y1 = torch.permute(y1, (0, 2, 3, 1))
-                # y2 = torch.permute(y2, (0, 2, 3, 1))
-                # y1 = y1.contiguous()
-                # y2 = y2.contiguous()
-                # y1 = torch.view_as_complex(y1)
-                # y2 = torch.view_as_complex(y2)
-                # y1_abs = torch.abs(y1)
-                # y2_abs = torch.abs(y2)
-                # loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
-                # loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
-                # batch_loss = torch.add((self.loss_weights['y1']*loss_y1), (self.loss_weights['y2']*loss_y2))
                 loss_y1, loss_y2, batch_loss = self.loss_2level_unet_nc(noised_signal_clone, clean_seg_abs)
+                sum_loss_y1 += loss_y1.item()
+                sum_loss_y2 += loss_y2.item()
+            elif '2_level_unet_cc' in self.arch_name:
+                loss_y1, loss_y2, batch_loss = self.loss_2level_unet_cc(noised_signal_clone, clean_seg_abs)
                 sum_loss_y1 += loss_y1.item()
                 sum_loss_y2 += loss_y2.item()
             elif '2_level_unet_nn' in self.arch_name:
@@ -191,7 +183,7 @@ class TrainClass:
             wandb.log({"train_epoch_loss_y2": epoch_loss_y2, "epoch": epoch})
         if(sum_loss_n1):
             epoch_loss_n1 = sum_loss_n1 / len(batch_loss_list)
-            wandb.log({"train_epoch_loss_n2": epoch_loss_n1, "epoch": epoch})
+            wandb.log({"train_epoch_loss_n1": epoch_loss_n1, "epoch": epoch})
         if(sum_loss_n2):
             epoch_loss_n2 = sum_loss_n2 / len(batch_loss_list)
             wandb.log({"train_epoch_loss_n2": epoch_loss_n2, "epoch": epoch})
@@ -199,6 +191,21 @@ class TrainClass:
 
     def loss_2level_unet_nc(self, noised_signal, clean_seg_abs):
         y1, y2, _ = self.model(noised_signal)
+        y1 = torch.permute(y1, (0, 2, 3, 1))
+        y2 = torch.permute(y2, (0, 2, 3, 1))
+        y1 = y1.contiguous()
+        y2 = y2.contiguous()
+        y1 = torch.view_as_complex(y1)
+        y2 = torch.view_as_complex(y2)
+        y1_abs = torch.abs(y1)
+        y2_abs = torch.abs(y2)
+        loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
+        loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
+        batch_loss = torch.add((self.loss_weights['y1'] * loss_y1), (self.loss_weights['y2'] * loss_y2))
+        return loss_y1, loss_y2, batch_loss
+
+    def loss_2level_unet_cc(self, noised_signal, clean_seg_abs):
+        y1, y2, _, _ = self.model(noised_signal)
         y1 = torch.permute(y1, (0, 2, 3, 1))
         y2 = torch.permute(y2, (0, 2, 3, 1))
         y1 = y1.contiguous()
@@ -285,19 +292,11 @@ class TrainClass:
                 noise_abs = torch.abs(noise)
 
                 if '2_level_unet_nc' in self.arch_name:
-                    # y1, y2, _ = self.model(noised_signal_clone)
-                    # y1 = torch.permute(y1, (0, 2, 3, 1))
-                    # y2 = torch.permute(y2, (0, 2, 3, 1))
-                    # y1 = y1.contiguous()
-                    # y2 = y2.contiguous()
-                    # y1 = torch.view_as_complex(y1)
-                    # y2 = torch.view_as_complex(y2)
-                    # y1_abs = torch.abs(y1)
-                    # y2_abs = torch.abs(y2)
-                    # loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
-                    # loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
-                    # batch_loss = torch.add((0.5 * loss_y1), (0.5 * loss_y2))
                     loss_y1, loss_y2, batch_loss = self.loss_2level_unet_nc(noised_signal_clone, clean_seg_abs)
+                    sum_loss_y1 += loss_y1.item()
+                    sum_loss_y2 += loss_y2.item()
+                elif '2_level_unet_cc' in self.arch_name:
+                    loss_y1, loss_y2, batch_loss = self.loss_2level_unet_cc(noised_signal_clone, clean_seg_abs)
                     sum_loss_y1 += loss_y1.item()
                     sum_loss_y2 += loss_y2.item()
                 elif '2_level_unet_nn' in self.arch_name:
@@ -370,19 +369,11 @@ class TrainClass:
                 noise_abs = torch.abs(noise)
 
                 if '2_level_unet_nc' in self.arch_name:
-                    # y1, y2, _ = self.model(noised_signal_clone)
-                    # y1 = torch.permute(y1, (0, 2, 3, 1))
-                    # y2 = torch.permute(y2, (0, 2, 3, 1))
-                    # y1 = y1.contiguous()
-                    # y2 = y2.contiguous()
-                    # y1 = torch.view_as_complex(y1)
-                    # y2 = torch.view_as_complex(y2)
-                    # y1_abs = torch.abs(y1)
-                    # y2_abs = torch.abs(y2)
-                    # loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
-                    # loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
-                    # batch_loss = torch.add((0.5 * loss_y1), (0.5 * loss_y2))
                     loss_y1, loss_y2, batch_loss = self.loss_2level_unet_nc(noised_signal_clone, clean_seg_abs)
+                    sum_loss_y1 += loss_y1.item()
+                    sum_loss_y2 += loss_y2.item()
+                elif '2_level_unet_cc' in self.arch_name:
+                    loss_y1, loss_y2, batch_loss = self.loss_2level_unet_cc(noised_signal_clone, clean_seg_abs)
                     sum_loss_y1 += loss_y1.item()
                     sum_loss_y2 += loss_y2.item()
                 elif '2_level_unet_nn' in self.arch_name:
@@ -431,7 +422,7 @@ class TrainClass:
     def create_output_dir(self):
         run_name = f'{self.arch_name}_model_{self.num_epochs}epochs_depth_{self.Ns[self.unet_depth] * 2}channels_batch{self.batch_size}'
         self.dir_name = f'{self.start_time}_{run_name}'
-        self.full_path = os.path.join(self.output_path, dir_name)
+        self.full_path = os.path.join(self.output_path, self.dir_name)
         os.mkdir(self.full_path)
 
     def prep_output_files(self):
@@ -534,7 +525,7 @@ if __name__ == "__main__":
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
-    cuda_num = 2
+    cuda_num = 1
     batch_size = 16
     num_workers = 9
     unet_depth = 6
@@ -544,7 +535,7 @@ if __name__ == "__main__":
     snrs = ['-3','0','3','6','9','12','15']
     # snrs = ['6']
     print(f'{snrs=}')
-    arch_name = "2_level_unet_2n2c"
+    arch_name = "2_level_unet_cc"
     print(f'{arch_name=}')
     output_path = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new'
     loss_weights = {'y1': 1, 'y2': 20, 'n1': 1, 'n2': 1}
