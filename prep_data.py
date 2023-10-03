@@ -95,7 +95,6 @@ class prep_data():
             for snr in SNR:
                 self.gen_n_save_SNR(norm_wav_sec, norm_noise, snr, str(i), audio_split_dir_name, audio_split_dir_path)
 
-
     def save_clean_stft(self, norm_wav_sec, index ,dir_name, dir_path):
         stft_sec = torch.stft(input=norm_wav_sec,
                               n_fft=self.wind_size,

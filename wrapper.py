@@ -14,7 +14,6 @@ class wrapper():
     def __init__(self, unet_depth, activation, Ns, run_dir, tar_name, input_file,  wind_size, hop_size, samples_per_seg, overlap, device):
         self.run_dir = run_dir
         self.tar_name = tar_name
-        self.arch_name = arch_name
         self.activation = activation
         self.input = input_file
         self.device = device
@@ -58,9 +57,9 @@ class wrapper():
         return norm_signal
 
     def gen_model(self, unet_depth, Ns, activation):
-        if "2_level_unet_nc" in self.arch_name:
+        if "2_level_unet_nc" in self.run_dir:
             self.model = model_v6.Model(unet_depth, Ns, activation)
-        elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name) or ("2_level_unet_cc" in self.arch_name):
+        elif ("2_level_unet_nn" in self.run_dir) or ("2_level_unet_2n2c" in self.run_dir) or ("2_level_unet_cc" in self.run_dir):
             self.model = model_v7.Model(unet_depth, Ns, activation)
         else:
             self.model = model_v4.Model(unet_depth, Ns, activation)
@@ -70,28 +69,18 @@ class wrapper():
         self.model.to(self.device)
 
     def through_the_model(self):
-        reconstruct = Reconstruct(self.device)
+        self.reconstruct = Reconstruct(self.device)
         with torch.no_grad():
             for idx, noise_segment in enumerate(self.seg_list):
                 noise_segment = noise_segment.to(self.device)
                 noise_segment = noise_segment.unsqueeze(0)
                 noise_segment = torch.view_as_real(noise_segment)
                 noise_segment = torch.permute(noise_segment, (0, 3, 1, 2))
-                if "2_level_unet_nc" in self.arch_name:
+                if "2_level_unet_nc" in self.run_dir:
                     y1, y2, est_noise = self.model(noise_segment)
-
-                    y1 = torch.permute(y1, (0, 2, 3, 1))
-                    y2 = torch.permute(y2, (0, 2, 3, 1))
-                    est_noise = torch.permute(est_noise, (0, 2, 3, 1))
-                    y1 = y1.contiguous()
-                    y2 = y2.contiguous()
-                    est_noise = est_noise.contiguous()
-                    y1 = torch.view_as_complex(y1)
-                    y2 = torch.view_as_complex(y2)
-                    est_noise = torch.view_as_complex(est_noise)
-                    recon_wav_y1 = reconstruct.istft_recon(y1).squeeze(0)
-                    recon_wav_y2 = reconstruct.istft_recon(y2).squeeze(0)
-                    recon_wav_est_noise = reconstruct.istft_recon(est_noise).squeeze(0)
+                    recon_wav_y1 = self.stft_from_model_to_wav(y1)
+                    recon_wav_y2 = self.stft_from_model_to_wav(y2)
+                    recon_wav_est_noise = self.stft_from_model_to_wav(est_noise)
                     if idx == 0:
                         y1_final = recon_wav_y1
                         y2_final = recon_wav_y2
@@ -101,36 +90,61 @@ class wrapper():
                         y2_final = torch.cat((y2_final, recon_wav_y2[109568:]), dim=0)
                         n1_final = torch.cat((n1_final, recon_wav_est_noise[109568:]), dim=0)
                     if idx == (len(self.seg_list)-1):
-                        y1_final = y1_final.detach().cpu()
-                        y2_final = y2_final.detach().cpu()
-                        n1_final = n1_final.detach().cpu()
-
-                        y1_final = y1_final.unsqueeze(0)
-                        y2_final = y2_final.unsqueeze(0)
-                        n1_final = n1_final.unsqueeze(0)
-
-                        print(y1_final.shape)
-                        print(self.x.shape)
-
+                        self.save_final_wav(self.x, 'clean.wav')
+                        self.save_final_wav(y1_final, 'y1.wav')
+                        self.save_final_wav(y2_final, 'y2.wav')
+                        self.save_final_wav(n1_final, 'n1.wav')
+                elif ("2_level_unet_nn" in self.run_dir) or ("2_level_unet_2n2c" in self.run_dir) or ("2_level_unet_cc" in self.run_dir):
+                    y1, y2, est_noise1, est_noise2 = self.model(noise_segment)
+                    recon_wav_y1 = self.stft_from_model_to_wav(y1)
+                    recon_wav_y2 = self.stft_from_model_to_wav(y2)
+                    recon_wav_est_noise1 = self.stft_from_model_to_wav(est_noise1)
+                    recon_wav_est_noise2 = self.stft_from_model_to_wav(est_noise2)
+                    if idx == 0:
+                        y1_final = recon_wav_y1
+                        y2_final = recon_wav_y2
+                        n1_final = recon_wav_est_noise1
+                        n2_final = recon_wav_est_noise2
+                    else:
+                        y1_final = torch.cat((y1_final, recon_wav_y1[109568:]), dim=0)
+                        y2_final = torch.cat((y2_final, recon_wav_y2[109568:]), dim=0)
+                        n1_final = torch.cat((n1_final, recon_wav_est_noise1[109568:]), dim=0)
+                        n2_final = torch.cat((n2_final, recon_wav_est_noise2[109568:]), dim=0)
+                    if idx == (len(self.seg_list) - 1):
                         torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/clean.wav', self.x, 44100)
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y1.wav', y1_final, 44100)
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/y2.wav', y2_final, 44100)
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/n1.wav', n1_final, 44100)
+                        self.save_final_wav(y1_final, 'y1.wav')
+                        self.save_final_wav(y2_final, 'y2.wav')
+                        self.save_final_wav(n1_final, 'n1.wav')
+                        self.save_final_wav(n2_final, 'n2.wav')
+
+    def stft_from_model_to_wav(self, stft):
+        stft = torch.permute(stft, (0, 2, 3, 1))
+        stft = stft.contiguous() # Ensure contiguous memory layout
+        stft = torch.view_as_complex(stft)
+        recon_wav = self.reconstruct.istft_recon(stft).squeeze(0)
+        return recon_wav
+
+    def save_final_wav(self, wav, name):
+        test_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test'
+        wav = wav.detach().cpu()
+        wav = wav.unsqueeze(0)
+        full_path = f'{test_dir}/{name}'
+        torchaudio.save(full_path, wav, 44100)
+
 
 
 if __name__ == "__main__":
-
-    cuda_num = 2
+    print('starting')
+    cuda_num = 1
     unet_depth = 6
     activation = nn.ELU()
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
-    arch_name = "2_level_unet_nc"
     device = choose_cuda(cuda_num)
     n_window = 2048
     hop_size = 1024
     samples_per_sec = 219136  # ~5 sec
     overlap = 0.5  # 50% overlap for more data
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/2023-08-04 16:27:56.556137_2_level_unet_model_30epochs_depth_512channels_batch16'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1759.wav'
     wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device)

@@ -157,10 +157,7 @@ class TrainClass:
                 sum_loss_n2 += loss_n2.item()
             else:
                 filtered_signal = self.model(noised_signal_clone)
-                filtered_signal = torch.permute(filtered_signal, (0, 2, 3, 1))
-                filtered_signal = filtered_signal.contiguous()  # Ensure contiguous memory layout
-                filtered_signal = torch.view_as_complex(filtered_signal)
-                recon_clean_abs = torch.abs(filtered_signal)
+                recon_clean_abs = self.stft_from_model_to_abs(filtered_signal)
                 batch_loss = self.loss_fn(recon_clean_abs, clean_seg_abs)
 
 
@@ -191,14 +188,8 @@ class TrainClass:
 
     def loss_2level_unet_nc(self, noised_signal, clean_seg_abs):
         y1, y2, _ = self.model(noised_signal)
-        y1 = torch.permute(y1, (0, 2, 3, 1))
-        y2 = torch.permute(y2, (0, 2, 3, 1))
-        y1 = y1.contiguous()
-        y2 = y2.contiguous()
-        y1 = torch.view_as_complex(y1)
-        y2 = torch.view_as_complex(y2)
-        y1_abs = torch.abs(y1)
-        y2_abs = torch.abs(y2)
+        y1_abs = self.stft_from_model_to_abs(y1)
+        y2_abs = self.stft_from_model_to_abs(y2)
         loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
         loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
         batch_loss = torch.add((self.loss_weights['y1'] * loss_y1), (self.loss_weights['y2'] * loss_y2))
@@ -206,14 +197,8 @@ class TrainClass:
 
     def loss_2level_unet_cc(self, noised_signal, clean_seg_abs):
         y1, y2, _, _ = self.model(noised_signal)
-        y1 = torch.permute(y1, (0, 2, 3, 1))
-        y2 = torch.permute(y2, (0, 2, 3, 1))
-        y1 = y1.contiguous()
-        y2 = y2.contiguous()
-        y1 = torch.view_as_complex(y1)
-        y2 = torch.view_as_complex(y2)
-        y1_abs = torch.abs(y1)
-        y2_abs = torch.abs(y2)
+        y1_abs = self.stft_from_model_to_abs(y1)
+        y2_abs = self.stft_from_model_to_abs(y2)
         loss_y1 = self.loss_fn(y1_abs, clean_seg_abs)
         loss_y2 = self.loss_fn(y2_abs, clean_seg_abs)
         batch_loss = torch.add((self.loss_weights['y1'] * loss_y1), (self.loss_weights['y2'] * loss_y2))
@@ -221,14 +206,8 @@ class TrainClass:
 
     def loss_2level_unet_nn(self, noised_signal, noise_abs):
         _, _, noise1, noise2 = self.model(noised_signal)
-        noise1 = torch.permute(noise1, (0, 2, 3, 1))
-        noise2 = torch.permute(noise2, (0, 2, 3, 1))
-        noise1 = noise1.contiguous()
-        noise2 = noise2.contiguous()
-        noise1 = torch.view_as_complex(noise1)
-        noise2 = torch.view_as_complex(noise2)
-        noise1_abs = torch.abs(noise1)
-        noise2_abs = torch.abs(noise2)
+        noise1_abs = self.stft_from_model_to_abs(noise1)
+        noise2_abs = self.stft_from_model_to_abs(noise2)
         loss_noise1 = self.loss_fn(noise1_abs, noise_abs)
         loss_noise2 = self.loss_fn(noise2_abs, noise_abs)
         batch_loss = torch.add((self.loss_weights['n1'] * loss_noise1), (self.loss_weights['n2'] * loss_noise2))
@@ -237,25 +216,13 @@ class TrainClass:
     def loss_2level_unet_2n2c(self, noised_signal, clean_abs, noise_abs):
         y1, y2, noise1, noise2 = self.model(noised_signal)
 
-        noise1 = torch.permute(noise1, (0, 2, 3, 1))
-        noise2 = torch.permute(noise2, (0, 2, 3, 1))
-        noise1 = noise1.contiguous()
-        noise2 = noise2.contiguous()
-        noise1 = torch.view_as_complex(noise1)
-        noise2 = torch.view_as_complex(noise2)
-        noise1_abs = torch.abs(noise1)
-        noise2_abs = torch.abs(noise2)
+        noise1_abs = self.stft_from_model_to_abs(noise1)
+        noise2_abs = self.stft_from_model_to_abs(noise2)
         loss_noise1 = self.loss_fn(noise1_abs, noise_abs)
         loss_noise2 = self.loss_fn(noise2_abs, noise_abs)
 
-        y1 = torch.permute(y1, (0, 2, 3, 1))
-        y2 = torch.permute(y2, (0, 2, 3, 1))
-        y1 = y1.contiguous()
-        y2 = y2.contiguous()
-        y1 = torch.view_as_complex(y1)
-        y2 = torch.view_as_complex(y2)
-        y1_abs = torch.abs(y1)
-        y2_abs = torch.abs(y2)
+        y1_abs = self.stft_from_model_to_abs(y1)
+        y2_abs = self.stft_from_model_to_abs(y2)
         loss_y1 = self.loss_fn(y1_abs, clean_abs)
         loss_y2 = self.loss_fn(y2_abs, clean_abs)
 
@@ -264,6 +231,13 @@ class TrainClass:
         batch_loss = torch.add(noise_loss,clean_loss)
 
         return loss_y1, loss_y2, loss_noise1, loss_noise2, batch_loss
+
+    def stft_from_model_to_abs(self, stft):
+        stft = torch.permute(stft, (0, 2, 3, 1))
+        stft = stft.contiguous() # Ensure contiguous memory layout
+        stft = torch.view_as_complex(stft)
+        s_abs = torch.abs(stft)
+        return s_abs
 
     def val_epoch(self, snr, epoch):
         batch_loss_list = []
@@ -313,10 +287,7 @@ class TrainClass:
                     sum_loss_n2 += loss_n2.item()
                 else:
                     filtered_signal = self.model(noised_signal_clone)
-                    filtered_signal = torch.permute(filtered_signal, (0, 2, 3, 1))
-                    filtered_signal = filtered_signal.contiguous()  # Ensure contiguous memory layout
-                    filtered_signal = torch.view_as_complex(filtered_signal)
-                    recon_clean_abs = torch.abs(filtered_signal)
+                    recon_clean_abs = self.stft_from_model_to_abs(filtered_signal)
                     batch_loss = self.loss_fn(recon_clean_abs, clean_seg_abs)
 
                 batch_loss_list.append(batch_loss.item())
@@ -390,10 +361,7 @@ class TrainClass:
                     sum_loss_n2 += loss_n2.item()
                 else:
                     filtered_signal = self.model(noised_signal_clone)
-                    filtered_signal = torch.permute(filtered_signal, (0, 2, 3, 1))
-                    filtered_signal = filtered_signal.contiguous()  # Ensure contiguous memory layout
-                    filtered_signal = torch.view_as_complex(filtered_signal)
-                    recon_clean_abs = torch.abs(filtered_signal)
+                    recon_clean_abs = self.stft_from_model_to_abs(filtered_signal)
                     batch_loss = self.loss_fn(recon_clean_abs, clean_seg_abs)
 
                 batch_loss_list.append(batch_loss.item())

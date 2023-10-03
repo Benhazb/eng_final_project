@@ -192,7 +192,7 @@ if __name__ == "__main__":
     recon_dataloader = ['2114_stft_sec51_clean.pickle', '2486_stft_sec34_clean.pickle', '2550_stft_sec53_clean.pickle', '2629_stft_sec102_clean.pickle']
 
     # transfer in the model again
-    trans_num = 20
+    trans_num = 1
 
     check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num)
     check_recon.back_to_wav()
