@@ -7,7 +7,7 @@ import pickle
 import random
 import scipy.io.wavfile as wavfile
 
-
+# Cuda connecting function
 def choose_cuda(cuda_num):
     if cuda_num=="cpu" or cuda_num==-1:
         device = "cpu"
@@ -28,21 +28,25 @@ def choose_cuda(cuda_num):
 
 class prep_data():
     def __init__(self, data_dir, wind_size, hop, samples_per_sect, overlap, device):
+        # Initialize the class parameters
         self.data_dir = data_dir
         self.wind_size = wind_size
         self.hop = hop
         self.device = device
-        self.wind = torch.hann_window(self.wind_size, device=self.device)
         self.samples_per_sect = samples_per_sect
         self.overlap_rate = overlap
 
+        # Creating the window by a built-in function from torch library
+        self.wind = torch.hann_window(self.wind_size, device=self.device)
+
     def prep_audio(self):
+        # 
         self.clean_data_list = self.extract_clean_data()
+
         self.noise_list = self.extract_noise('gramophone noise')
         self.noise_index = list(range(0,len(self.noise_list)))
         for wav_file in self.clean_data_list:
             self.split_n_stft(wav_file)
-
 
     def extract_noise(self, noise_dir_name):
         noise_paths_list = []
@@ -222,15 +226,24 @@ class prep_data():
 ##
 ############################################
 if __name__ == "__main__":
-    #prep_data_params
+
     cuda_num = 0
+    # Connect to cuda
     device = choose_cuda(cuda_num)
+
+    # The folder where all the data is stored
     data_base_dir = f"/dsi/scratch/from_netapp/users/hazbanb/dataset"
+
+    # Properties of the STFT transform window
     n_window = 2048
     hop_size = 1024
     samples_per_sec = 219136 #~5 sec
     overlap = 0.5 #50% overlap for more data
+
+    # Initialize the class with the parameters above
     data = prep_data(data_base_dir, n_window, hop_size, samples_per_sec, overlap, device)
+
+    # Function that prepares the data for transfer in the model
     data.prep_audio()
     data.rand_val_n_test('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/val_data_split/')
     data.rand_val_n_test('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split/')
@@ -238,5 +251,3 @@ if __name__ == "__main__":
     #with open(f"/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/train_data_split/1733/1733_stft_sec15_clean.pickle", 'rb') as file:
     #    pickle_file = pickle.load(file)
     #    data.save_as_wav(pickle_file, f"1733_sec15_clean.wav")
-
-

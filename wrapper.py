@@ -11,7 +11,7 @@ from reconstruction import Reconstruct
 import os
 
 class wrapper():
-    def __init__(self, unet_depth, activation, Ns, run_dir, tar_name, input_file,  wind_size, hop_size, samples_per_seg, overlap, device):
+    def __init__(self, unet_depth, activation, Ns, run_dir, tar_name, input_file,  wind_size, hop_size, samples_per_seg, overlap, device, output_dir):
         self.run_dir = run_dir
         self.tar_name = tar_name
         self.activation = activation
@@ -24,7 +24,13 @@ class wrapper():
         self.wind = torch.hann_window(self.wind_size, device=self.device)
         self.seg_list = []
         self.gen_model(unet_depth, Ns, self.activation)
+        self.output_dir = output_dir
+        self.creat_output_dir(self.input.split('/')[-1].split('.wav')[0])
 
+    def creat_output_dir(self, name):
+        self.path = os.path.join(self.output_dir, name)
+        if not os.path.exists(self.path):
+            os.mkdir(self.path)
     def split_n_stft(self):
         self.x, fs = torchaudio.load(self.input)
         x = self.x.to(self.device)
@@ -111,11 +117,12 @@ class wrapper():
                         n1_final = torch.cat((n1_final, recon_wav_est_noise1[109568:]), dim=0)
                         n2_final = torch.cat((n2_final, recon_wav_est_noise2[109568:]), dim=0)
                     if idx == (len(self.seg_list) - 1):
-                        torchaudio.save('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test/clean.wav', self.x, 44100)
+                        torchaudio.save(os.path.join(self.path, 'org.wav'), self.x, 44100)
                         self.save_final_wav(y1_final, 'y1.wav')
                         self.save_final_wav(y2_final, 'y2.wav')
                         self.save_final_wav(n1_final, 'n1.wav')
                         self.save_final_wav(n2_final, 'n2.wav')
+        return y2_final
 
     def stft_from_model_to_wav(self, stft):
         stft = torch.permute(stft, (0, 2, 3, 1))
@@ -125,16 +132,14 @@ class wrapper():
         return recon_wav
 
     def save_final_wav(self, wav, name):
-        test_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/test'
         wav = wav.detach().cpu()
         wav = wav.unsqueeze(0)
-        full_path = f'{test_dir}/{name}'
+        full_path = os.path.join(self.path,name)
         torchaudio.save(full_path, wav, 44100)
 
 
 
 if __name__ == "__main__":
-    print('starting')
     cuda_num = 1
     unet_depth = 6
     activation = nn.ELU()
@@ -146,8 +151,9 @@ if __name__ == "__main__":
     overlap = 0.5  # 50% overlap for more data
     run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
-    input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1759.wav'
-    wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device)
+    input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1819.wav'
+    output_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/test'
+    wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device, output_dir)
     wrap.split_n_stft()
-    wrap.through_the_model()
+    recon = wrap.through_the_model()
     full_segmented_song = wrap.seg_list
