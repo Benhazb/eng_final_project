@@ -48,15 +48,16 @@ class LoadRecon:
         self.reconstruct = Reconstruct(self.device)
         self.model.eval()
         self.segment_snr_list = []
-        self.total_snr_vec = torch.zeros(self.trans_num)
+        self.total_snr_vec = torch.zeros(self.trans_num+1)
         self.pesq_list = []
         self.total_frq_snr = torch.empty(1,1025).to(self.device)
         self.hist = torch.zeros(1,1025).to(self.device)
         self.arr= []
-        self.rep_snr_hist = torch.zeros(self.trans_num)
+        self.rep_snr_hist = torch.zeros(self.trans_num+1)
+        div = 0
         with torch.no_grad():
             for example in self.recon_dataloader:
-                self.segment_snr_list=[]
+                self.segment_snr_list=[9]
                 dir_num = example.split('_')[0]
                 clean_path = os.path.join(test_dir, dir_num, example)
                 noise_name = example.replace('stft', 'noise_stft').replace('clean', 'SNR9_db')
@@ -119,10 +120,9 @@ class LoadRecon:
                             y1, y2, current_snr, _ = self.recon_model_v7(y2, clean_wav, noise_wav)
                             self.segment_snr_list.append(current_snr)
                     repeat -= 1
-
-            segment_snr_tensor = torch.tensor(self.segment_snr_list)
-            self.total_snr_vec = torch.add(self.total_snr_vec,segment_snr_tensor)
-            self.rep_snr_hist[torch.argmax(segment_snr_tensor)] += 1
+                segment_snr_tensor = torch.tensor(self.segment_snr_list)
+                self.total_snr_vec = torch.add(self.total_snr_vec,segment_snr_tensor)
+                self.rep_snr_hist[torch.argmax(segment_snr_tensor)] += 1
 
         bars = self.hist.cpu()
         bars_np = bars.numpy()
@@ -137,10 +137,12 @@ class LoadRecon:
         bars_np = bars.numpy()
         bars_np = bars_np.squeeze()
         x = []
-        for i in range(0, self.trans_num):
+        for i in range(0, self.trans_num+1):
             x.append(i)
         plt.bar(x, bars_np)
         plt.show()
+
+        print(torch.mul(self.total_snr_vec, (1/len(self.recon_dataloader))))
 
     def recon_model_v6(self, noisy_signal, clean_wav, noise_wav):
         y1_stft, y2_stft, _ = self.model(noisy_signal)
@@ -195,7 +197,6 @@ class LoadRecon:
         org_snr = self.snr_calc(clean, noise)
         y1_snr = self.snr_calc(clean, (recon_y1 - clean))
         y2_snr = self.snr_calc(clean, (recon_y2 - clean))
-        # print(f'{name=}:\n{org_snr=}\n{y1_snr=}\n{y2_snr=}\n***********************')
         if y1_snr > y2_snr:
             return 'y1', y1_snr
         else:
