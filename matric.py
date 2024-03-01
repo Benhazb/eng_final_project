@@ -6,6 +6,7 @@ from prep_data import choose_cuda
 
 import sys
 from pesq import pesq
+import librosa
 sys.path.append('/home/dsi/hazbanb/project/git/models')
 import model_v6
 import model_v4
@@ -28,13 +29,14 @@ EPS = sys.float_info.epsilon
 # )
 
 class LoadRecon:
-    def __init__(self, cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num):
+    def __init__(self, cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num, pesq_flag):
         self.run_dir = run_dir
         self.tar_name = tar_name
         self.recon_dataloader = recon_dataloader
         self.arch_name = arch_name
         self.gen_model(unet_depth, Ns, activation, cuda_num)
         self.trans_num = trans_num
+        self.pesq_flag = pesq_flag
         self.all_snr = []
     def get_snr(self):
         print(self.all_snr)
@@ -60,11 +62,14 @@ class LoadRecon:
         self.reconstruct = Reconstruct(self.device)
         self.model.eval()
         self.segment_snr_list = []
+        self.total_snr_vec = torch.zeros(self.trans_num+1)
+        self.segment_pesq_list = []
         self.total_frq_snr = torch.empty(1,1025).to(self.device)
         self.hist = torch.zeros(1,1025).to(self.device)
         self.arr= []
         with torch.no_grad():
             for example in self.recon_dataloader:
+                print (example)
                 self.segment_snr_list=[]
                 dir_num = example.split('_')[0]
                 clean_path = os.path.join(test_dir, dir_num, example)
@@ -93,22 +98,23 @@ class LoadRecon:
 
                 # send noisy to model
                 if "2_level_unet_nc" in self.arch_name:
-                    y1, y2, current_snr = self.recon_model_v6(noisy_signal, example, clean_wav, noise_wav)
+                    y1, y2, current_snr, current_pesq = self.recon_model_v6(noisy_signal, example, clean_wav, noise_wav)
                     self.segment_snr_list.append(current_snr)
+                    self.segment_pesq_list.append(current_pesq)
+
                 elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name) or (
                         "2_level_unet_cc" in self.arch_name):
-                    y1, y2, current_snr = self.recon_model_v7(noisy_signal, example, clean_wav, noise_wav)
+                    y1, y2, current_snr, current_pesq = self.recon_model_v7(noisy_signal, example, clean_wav, noise_wav)
                     self.segment_snr_list.append(current_snr)
+                    self.segment_pesq_list.append(current_pesq)
                 else:
                     filtered_signal = self.model(noisy_signal)
 
+                # for histograma
                 y1_complex = torch.permute(y1, (0, 2, 3, 1))
                 y1_complex = torch.view_as_complex(y1_complex)
-
                 current_frq_snr = self.frq_snr(clean_stft, (clean_stft-y1_complex))
                 self.total_frq_snr = torch.add(current_frq_snr, self.total_frq_snr)
-                # print(torch.argmin(current_frq_snr))
-
                 self.hist[0,torch.argmin(current_frq_snr)] += 1
                 self.arr.append(torch.argmin(current_frq_snr))
 
@@ -116,83 +122,101 @@ class LoadRecon:
                 while self.trans_num > 1:
                     idx += 1
                     if "2_level_unet_nc" in self.arch_name:
-                        if self.less_noisy == 'y1':
-                            y1, y2, current_snr = self.recon_model_v6(y1, f'rep{idx}_{example}', clean_wav, noise_wav)
-                            self.segment_snr_list.append(current_snr)
+                        if self.pesq_flag:
+                            if self.best_pesq_flag == 'y1':
+                                y1, y2, current_snr, current_pesq = self.recon_model_v6(y1, f'rep{idx}_{example}',clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
+                            else:
+                                y1, y2, current_snr, current_pesq = self.recon_model_v6(y2, f'rep{idx}_{example}',clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
                         else:
-                            y1, y2, current_snr = self.recon_model_v6(y2, f'rep{idx}_{example}', clean_wav, noise_wav)
-                            self.segment_snr_list.append(current_snr)
+                            if self.less_noisy == 'y1':
+                                y1, y2, current_snr, current_pesq = self.recon_model_v6(y1, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
+                            else:
+                                y1, y2, current_snr, current_pesq = self.recon_model_v6(y2, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
+
                     elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name) or (
                             "2_level_unet_cc" in self.arch_name):
-                        if self.less_noisy == 'y1':
-                            y1, y2, current_snr = self.recon_model_v7(y1, f'rep{idx}_{example}', clean_wav, noise_wav)
-                            self.segment_snr_list.append(current_snr)
+                        if self.pesq_flag:
+                            if self.best_pesq_flag == 'y1':
+                                y1, y2, current_snr = self.recon_model_v7(y1, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
+                            else:
+                                y1, y2, current_snr = self.recon_model_v7(y2, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
                         else:
-                            y1, y2, current_snr = self.recon_model_v7(y2, f'rep{idx}_{example}', clean_wav, noise_wav)
-                            self.segment_snr_list.append(current_snr)
+                            if self.less_noisy == 'y1':
+                                y1, y2, current_snr = self.recon_model_v7(y1, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
+                            else:
+                                y1, y2, current_snr = self.recon_model_v7(y2, f'rep{idx}_{example}', clean_wav, noise_wav)
+                                self.segment_snr_list.append(current_snr)
+                                self.segment_pesq_list.append(current_pesq)
                     self.trans_num -= 1
-                self.all_snr.append(max(self.segment_snr_list))
-                # wandb.log({"tens": max(self.segment_snr_list)})
-                # print(max(self.segment_snr_list))
-        print(torch.argmax(self.hist))
-        print(torch.max(self.hist))
-        y_max = torch.max(self.hist).cpu()
-        print(len(self.arr))
-        hist_array=[]
-        for tensor in self.arr:
-            tensor_cpu = tensor.cpu()  # Move tensor from CUDA to CPU
-            arr_np = tensor_cpu.numpy()  # Convert tensor to NumPy array
-            hist_array.append(arr_np)  # Append NumPy array to list
-        # print(np_hist.squeeze().shape)
-        plt.hist(hist_array,1026)
-        plt.ylim(0,10 )
+
+            segment_snr_tensor = torch.tensor(self.segment_snr_list)
+            self.total_snr_vec = torch.add(self.total_snr_vec,segment_snr_tensor)
+
+        bars = self.hist.cpu()
+        bars_np = bars.numpy()
+        bars_np = bars_np.squeeze()
+        x = []
+        for i in range(0, 1025):
+            x.append(i)
+        plt.bar(x, bars_np)
         plt.show()
-        print(hist_array)
-        hist_array = np.atleast_2d(hist_array)
-        print(hist_array)
-        np.savetxt('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/array_data.csv', hist_array)
-        with open('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs/array_data.csv', 'w') as f:
-            for row in hist_array:
-                f.write(' '.join(map(str, row)) + '\n')
-        # print('hi')
-        # print()
-        # print(torch.min(self.total_frq_snr))
-        # print(torch.argmin(self.total_frq_snr))
-        # print(self.total_frq_snr)
+        hist_array = []
+
     def recon_model_v6(self, noisy_signal, example, clean_wav, noise_wav):
         y1_stft, y2_stft, est_noise_stft = self.model(noisy_signal)
 
-        # save wav files
+        recon_y1 = self.stft_from_model_to_wav(y1_stft)
+        pesq_y1 = self.pesq_calc(clean_wav, recon_y1)
 
-        recon_name_y1 = f"{example.split('clean')[0]}_reconstruct_{self.tar_name.split('.tar')[0]}_y1.wav"
-        recon_y1 = self.stft_from_model_to_wav(recon_name_y1, y1_stft)
+        recon_y2 = self.stft_from_model_to_wav(y2_stft)
+        pesq_y2 = self.pesq_calc(clean_wav, recon_y2)
 
-        recon_name_y2 = f"{example.split('clean')[0]}_reconstruct_{self.tar_name.split('.tar')[0]}_y2.wav"
-        recon_y2 = self.stft_from_model_to_wav(recon_name_y2, y2_stft)
-
+        best_pesq = max(pesq_y1, pesq_y2)
         # recon_name_est_noise = f"{example.split('clean')[0]}_reconstruct_{self.tar_name.split('.tar')[0]}_est_noise.wav"
         # self.stft_from_model_to_wav(recon_name_est_noise, est_noise_stft)
 
         # calc snr
-        self.less_noisy, current_snr = self.snr(clean_wav, noise_wav, recon_y1, recon_y2, example.split('_clean')[0])
+        self.less_noisy, current_snr = self.snr(clean_wav, noise_wav, recon_y1, recon_y2)
 
-        return y1_stft, y2_stft, current_snr
+        return y1_stft, y2_stft, current_snr, best_pesq
 
     def recon_model_v7(self, noisy_signal, example, clean_wav, noise_wav):
         y1_stft, y2_stft, est_noise1_stft, est_noise2_stft = self.model(noisy_signal)
-        recon_y1 = self.stft_from_model_to_wav(y1_stft)
-        recon_y2 = self.stft_from_model_to_wav(y2_stft)
 
-        # recon_name_est_noise1 = f"{example.split('clean')[0]}_reconstruct_{self.tar_name.split('.tar')[0]}_est_noise1.wav"
-        # self.stft_from_model_to_wav(recon_name_est_noise1, est_noise1_stft)
-        #
-        # recon_name_est_noise2 = f"{example.split('clean')[0]}_reconstruct_{self.tar_name.split('.tar')[0]}_est_noise2.wav"
-        # self.stft_from_model_to_wav(est_noise2_stft)
+        recon_y1 = self.stft_from_model_to_wav(y1_stft)
+        pesq_y1 = self.pesq_calc(clean_wav, recon_y1)
+
+        recon_y2 = self.stft_from_model_to_wav(y2_stft)
+        pesq_y2 = self.pesq_calc(clean_wav, recon_y2)
+        best_pesq = max(pesq_y1, pesq_y2)
+        if pesq_y1 > pesq_y2:
+            self.best_pesq_flag = 'y1'
+        else:
+            self.best_pesq_flag = 'y2'
+
+
+
+        self.stft_from_model_to_wav(est_noise1_stft)
+        self.stft_from_model_to_wav(est_noise2_stft)
 
         # calc snr
-        self.less_noisy, current_snr = self.snr(clean_wav, noise_wav, recon_y1, recon_y2, example.split('_clean')[0])
+        self.less_noisy, current_snr = self.snr(clean_wav, noise_wav, recon_y1, recon_y2)
 
-        return y1_stft, y2_stft, current_snr
+        return y1_stft, y2_stft, current_snr, best_pesq
 
     def stft_to_wav(self, stft):
         wav = self.reconstruct.istft_recon(stft)
@@ -205,7 +229,7 @@ class LoadRecon:
         wav = self.reconstruct.istft_recon(stft)
         return wav
 
-    def snr(self, clean, noise, recon_y1, recon_y2, name):
+    def snr(self, clean, noise, recon_y1, recon_y2):
         org_snr = self.snr_calc(clean, noise)
         y1_snr = self.snr_calc(clean, (recon_y1 - clean))
         y2_snr = self.snr_calc(clean, (recon_y2 - clean))
@@ -227,6 +251,18 @@ class LoadRecon:
         snr = 10 * torch.log10(Ps / (Pn + EPS))
         return snr
 
+    def pesq_calc(self, ref, deg):
+        ref = ref.cpu().squeeze()
+        ref = ref.numpy()
+        print(ref)
+        print(ref.shape)
+        deg = deg.cpu().squeeze()
+        deg = deg.numpy()
+        ref_resampled = librosa.resample(ref, orig_sr=44100, target_sr=16000)
+        deg_resampled = librosa.resample(deg, orig_sr=44100, target_sr=16000)
+        pesq_result = pesq(16000, ref_resampled, deg_resampled, mode='wb')
+        return pesq_result
+
 
     # def spectogram_snr(self,clean, noise, recon_y1, recon_y2, name):
 
@@ -241,16 +277,18 @@ if __name__ == "__main__":
     arch_name = "2_level_unet_2n2c"
     run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
-
-    recon_dataloader = ['2114_stft_sec51_clean.pickle', '2486_stft_sec34_clean.pickle', '2550_stft_sec53_clean.pickle', '2629_stft_sec102_clean.pickle']
-    for root, _, files in os.walk('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split'):
-        for file in files:
-            if file.endswith('clean.pickle'):
-                recon_dataloader.append(file)
+    pesq_flag = 0
+    recon_dataloader = []
+    recon_dataloader = ['2629_stft_sec0_clean.pickle', '2114_stft_sec51_clean.pickle', '2486_stft_sec34_clean.pickle',
+                        '2550_stft_sec53_clean.pickle', '2629_stft_sec102_clean.pickle']
+    # for root, _, files in os.walk('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split'):
+    #     for file in files:
+    #         if file.endswith('clean.pickle'):
+    #             recon_dataloader.append(file)
 
     # transfer in the model again
     trans_num = 5
 
-    check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num)
+    check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num, pesq_flag)
     check_recon.back_to_wav()
     # check_recon.get_snr()
