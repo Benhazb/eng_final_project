@@ -238,8 +238,6 @@ class LoadRecon:
         ref, rate = self.load(path)
         torchaudio.save(path, deg.detach().cpu(), 44100)
         deg, rate = self.load(path)
-        print(type(deg))
-        print(deg.shape)
         torchpeaq = torch_PEAQ.PEAQ(32768, Fs=44100)
         torchpeaq.process(ref, deg)
         torchmetrics = torchpeaq.avg_get()
@@ -247,7 +245,6 @@ class LoadRecon:
 
     def load(self, name):
         audio, rate = torchaudio.load(name, normalize=False)
-
         if audio.dtype == torch.float32:
             audio = audio * 32768.
         audio = audio.squeeze().numpy()
