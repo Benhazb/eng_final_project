@@ -840,12 +840,19 @@ class PEAQ(object):
         Xth = torch.amax(X2MatT[..., kx:-1], -1)
         XthR = FR * Xth
         cond = X2MatR[..., kl + 1:kx] >= XthR[..., None]
+        # print(X2MatR)
+        # print(type(X2MatR))
+        # print(X2MatR.shape)
         BWRef = \
         (torch.arange(kl + 1, cond.shape[-1] + kl + 1, device=self.device, dtype=self.dtype)[None] * cond).max(-1)[
             0] + 1
 
         XthT = FT * Xth
         cond = X2MatT[..., :int(BWRef - 1)] >= XthT[..., None]
+        print(BWRef)
+        print(X2MatT)
+        print(type(X2MatT))
+        print(X2MatT.shape)
         BWTest = (torch.arange(cond.shape[-1], device=self.device, dtype=self.dtype)[None] * cond).max(-1)[0] + 1
         return BWRef, BWTest
 

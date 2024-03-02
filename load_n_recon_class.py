@@ -159,6 +159,7 @@ class LoadRecon:
         wav = wav.detach().cpu()
         wav_path = os.path.join(self.run_dir, name)
         torchaudio.save(wav_path, wav, 44100)
+        os.chmod(wav_path,0o777)
         return wav
 
     def snr(self, clean, noise, recon_y1, recon_y2, name):
