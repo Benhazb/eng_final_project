@@ -54,7 +54,7 @@ class LoadRecon:
         self.total_snr_vec = torch.zeros(self.trans_num+1)
         self.peaq_list = []
         self.total_frq_snr = torch.empty(1,1025).to(self.device)
-        self.hist = torch.zeros(1,1025).to(self.device)
+        self.hist = torch.zeros(1,1026).to(self.device)
         self.arr= []
         self.rep_snr_hist = torch.zeros(self.trans_num+1)
         with torch.no_grad():
@@ -130,14 +130,14 @@ class LoadRecon:
         bars_np = bars.numpy()
         bars_np = bars_np.squeeze()
         x = []
-        for i in range(0, 1025):
+        for i in range(0, 1026):
             x.append(i)
         plt.title(f'Base SNR={snr},Freq snr hist')
-        plt.bar(x, bars_np)
+        plt.plot(x, bars_np)
         max_x = np.argmax(bars_np)
         max_y = np.max(bars_np)
         plt.scatter(max_x,max_y,color='red')
-        plt.text(max_x-100,int(max_y)+5,f'({max_x},{max_y})')
+        plt.text(max_x-70,max_y+3,f'({max_x},{int(max_y)})')
         # plt.annotate(f'({max_x},{max_y})', xy=(max_x, max_y), xytext=(max_x, max_y + 1), arrowprops=dict(facecolor='red', shrink=0.05))
         plt.show()
 
@@ -261,10 +261,10 @@ if __name__ == "__main__":
     cuda_num = 1
     unet_depth = 6
     activation = nn.ELU()
-    snr_list = ['-3','0','3','6','9']
+    snr_list = ['-3','0','3','6','9','12','15']
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
     arch_name = "2_level_unet_2n2c"
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-22 16:20:26.320353_2_level_unet_cc_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     peaq_flag = 0
     recon_dataloader = []
@@ -274,7 +274,7 @@ if __name__ == "__main__":
                 recon_dataloader.append(file)
 
     # transfer in the model again
-    trans_num = 5
+    trans_num = 20
 
     check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num, peaq_flag)
     for snr in snr_list:
