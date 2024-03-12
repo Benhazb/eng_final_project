@@ -9,28 +9,26 @@ from torch import nn
 class Model(nn.Module):
     def __init__(self, depth, Ns, activation):
         super().__init__()
-        print('model_v7')
+        print('model_v8')
         self.activation = activation
         self.depth = depth
         self.Ns = Ns
 
-        self.pe = Add_f_encoding(1025)
-
+        self.pe = AddFEncoding(1025)
 
         ksize=(7,7)
         self.paddings_1=get_paddings(ksize)
         self.conv2d_1 = nn.Sequential(
-                            nn.Conv2d(in_channels=2,
+                            nn.Conv2d(in_channels=12,
                                 out_channels=Ns[0],
                                 kernel_size=ksize,
                                 stride=1,
                                 padding=self.paddings_1,
                                 padding_mode='reflect'),
                             self.activation)
-        ksize = (7, 7)
-        self.paddings_6 = get_paddings(ksize)
-        self.conv2d_1 = nn.Sequential(
-            nn.Conv2d(in_channels=2,
+
+        self.conv2d_6 = nn.Sequential(
+            nn.Conv2d(in_channels=12,
                       out_channels=Ns[0],
                       kernel_size=ksize,
                       stride=1,
@@ -89,9 +87,7 @@ class Model(nn.Module):
 
 
     def forward(self, x):
-
         x_frq = self.pe(x)
-
         F_in_1 = self.conv2d_1(x_frq)
         F_out_1 = self.unet_1(F_in_1)
         est_noise1 = self.conv2d_2(F_out_1)
@@ -101,7 +97,8 @@ class Model(nn.Module):
         M1 = torch.sigmoid(M1)
         M = torch.mul(M0, M1)
         F_sam = torch.add(M, F_out_1)
-        F_in_2 = torch.concat([F_sam,F_in_1], dim=1)
+        F_in_2 = self.conv2d_6(x_frq)
+        F_in_2 = torch.concat([F_sam,F_in_2], dim=1)
         F_out_2 = self.unet_2(F_in_2)
         est_noise2 = self.conv2d_5(F_out_2)
         Y2 = torch.add(x, est_noise2)
@@ -169,9 +166,9 @@ class Unet(nn.Module):
 
         return self.final_conv(x)
 
-class Add_f_encoding(nn.Module):
-    def __init__(self,f_dim):
-        super(Add_f_encoding, self).__init__()
+class AddFEncoding(nn.Module):
+    def __init__(self, f_dim):
+        super(AddFEncoding, self).__init__()
         pi = torch.tensor(math.pi)
         pi = pi.to(torch.float32)
         self.f_dim = f_dim
@@ -181,7 +178,9 @@ class Add_f_encoding(nn.Module):
         self.fembeddings = f_channel
         for k in range(1,10):
             coss = torch.cos(2**k*pi*n)
+            f_channel = coss.unsqueeze(0)
             self.fembeddings = torch.cat([self.fembeddings,f_channel],dim=0)
+
     def forward(self, input_tesor):
         batch_size_tensor = input_tesor.size(0)
         time_dim = input_tesor.size(3)

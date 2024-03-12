@@ -11,6 +11,7 @@ sys.path.append('/home/dsi/hazbanb/project/git/models')
 import model_v4
 import model_v6
 import model_v7
+import model_v8
 from dataset import create_dataset
 import wandb
 
@@ -35,7 +36,10 @@ class TrainClass:
         elif 'one_level_unet' in self.arch_name:
             self.model = model_v4.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
         elif ('2_level_unet_nn' in self.arch_name) or ('2_level_unet_2n2c' in self.arch_name) or ('2_level_unet_cc' in self.arch_name):
-            self.model = model_v7.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
+            if 'with_pe' not in self.arch_name:
+                self.model = model_v7.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
+            else:
+                self.model = model_v8.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-05)
         self.short_run = short_run
         self.check_points = check_points
@@ -493,7 +497,7 @@ if __name__ == "__main__":
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
-    cuda_num = 1
+    cuda_num = 3
     batch_size = 16
     num_workers = 9
     unet_depth = 6
@@ -503,7 +507,7 @@ if __name__ == "__main__":
     snrs = ['-3','0','3','6','9','12','15']
     # snrs = ['6']
     print(f'{snrs=}')
-    arch_name = "2_level_unet_cc"
+    arch_name = "2_level_unet_2n2c_with_pe"
     print(f'{arch_name=}')
     output_path = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new'
     loss_weights = {'y1': 1, 'y2': 20, 'n1': 1, 'n2': 1}
