@@ -133,9 +133,9 @@ class LoadRecon:
         recon_y1 = self.stft_from_model_to_wav(y1_stft)
         recon_y2 = self.stft_from_model_to_wav(y2_stft)
 
-        est_noise = self.stft_from_model_to_wav(est_noise_stft)
-        est_noise_name = f"{self.tar_name.split('.tar')[0]}_est_noise_{example.split('_')[0]}.wav"
-        self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise)
+        # est_noise = self.stft_from_model_to_wav(est_noise_stft)
+        # est_noise_name = f"{self.tar_name.split('.tar')[0]}_est_noise_{example.split('_')[0]}.wav"
+        # self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise)
 
         # calc snr
         self.less_noisy = self.snr(clean_wav, noise_wav, recon_y1, recon_y2, example.split('_clean')[0])
@@ -154,12 +154,12 @@ class LoadRecon:
         recon_y1 = self.stft_from_model_to_wav(y1_stft)
         recon_y2 = self.stft_from_model_to_wav(y2_stft)
 
-        est_noise_1 = self.stft_from_model_to_wav(est_noise1_stft)
-        est_noise_2 = self.stft_from_model_to_wav(est_noise2_stft)
+        # est_noise_1 = self.stft_from_model_to_wav(est_noise1_stft)
+        # est_noise_2 = self.stft_from_model_to_wav(est_noise2_stft)
 
         # calc snr
         self.less_noisy = self.snr(clean_wav, noise_wav, recon_y1, recon_y2, example.split('_clean')[0])
-        self.more_similar_noise = self.closer_est_noise_check(noise_wav, est_noise_1, est_noise_2)
+        # self.more_similar_noise = self.closer_est_noise_check(noise_wav, est_noise_1, est_noise_2)
 
         y_name = f"{self.tar_name.split('.tar')[0]}_y_recon_{example.split('_')[0]}.wav"
         if self.less_noisy == 'y1':
@@ -167,11 +167,11 @@ class LoadRecon:
         else:
             self.save_wav_file(os.path.join(self.seg_path, y_name), recon_y2)
 
-        est_noise_name = f"{self.tar_name.split('.tar')[0]}_est_noise_{example.split('_')[0]}.wav"
-        if self.more_similar_noise == 'est1':
-            self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise_1)
-        else:
-            self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise_2)
+        # est_noise_name = f"{self.tar_name.split('.tar')[0]}_est_noise_{example.split('_')[0]}.wav"
+        # if self.more_similar_noise == 'est1':
+        #     self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise_1)
+        # else:
+        #     self.save_wav_file(os.path.join(self.seg_path, est_noise_name), est_noise_2)
 
         return y1_stft, y2_stft
 
@@ -231,8 +231,8 @@ if __name__ == "__main__":
     unet_depth = 6
     activation = nn.ELU()
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
-    arch_name = "2_level_unet_cc"
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-22 16:20:26.320353_2_level_unet_cc_model_30epochs_depth_512channels_batch16'
+    arch_name = "2_level_unet_nn"
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-16 17:18:08.884059_2_level_unet_nn_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     recon_dataloader = []
     for root, _, files in os.walk('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split'):
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     # transfer in the model again
     trans_num = 20
 
-    snr_list = ['-3', '0', '3', '6', '9', '12', '15']
+    snr_list = ['0', '3', '6', '9', '12']
     check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num, snr_list)
     for snr in snr_list:
         check_recon.back_to_wav(snr)

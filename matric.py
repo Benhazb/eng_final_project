@@ -264,7 +264,7 @@ if __name__ == "__main__":
     snr_list = ['-3','0','3','6','9','12','15']
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
     arch_name = "2_level_unet_2n2c"
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-22 16:20:26.320353_2_level_unet_cc_model_30epochs_depth_512channels_batch16'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-16 17:18:08.884059_2_level_unet_nn_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     peaq_flag = 0
     recon_dataloader = []
