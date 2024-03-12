@@ -1,6 +1,5 @@
 from torchinfo import summary
-from wandb.vendor.pygments.lexers import math
-
+import numpy as np
 from prep_data import choose_cuda
 import torchvision.transforms.functional as func
 import torch
@@ -169,7 +168,7 @@ class Unet(nn.Module):
 class AddFEncoding(nn.Module):
     def __init__(self, f_dim):
         super(AddFEncoding, self).__init__()
-        pi = torch.tensor(math.pi)
+        pi = torch.tensor(np.pi)
         pi = pi.to(torch.float32)
         self.f_dim = f_dim
         n = torch.arange(f_dim,dtype=torch.float32)/(f_dim-1)
@@ -181,11 +180,11 @@ class AddFEncoding(nn.Module):
             f_channel = coss.unsqueeze(0)
             self.fembeddings = torch.cat([self.fembeddings,f_channel],dim=0)
 
-    def forward(self, input_tesor):
-        batch_size_tensor = input_tesor.size(0)
-        time_dim = input_tesor.size(3)
+    def forward(self, input_tensor):
+        batch_size_tensor = input_tensor.size(0)
+        time_dim = input_tensor.size(3)
         fembeddings_2 = self.fembeddings.expand(batch_size_tensor, 10, self.f_dim, time_dim)
-        return torch.cat([input_tesor, fembeddings_2], dim=1)
+        return torch.cat([input_tensor, fembeddings_2], dim=1)
 
 
 def get_paddings(K):
@@ -208,4 +207,4 @@ if __name__ == "__main__":
     col_names = ["input_size", "output_size", "num_params"]
     with torch.cuda.device(device):
         summary(model, input_size=[16,2,1025,215], col_names=col_names)  # set input_size to tuple for [audio, video]
-    print("model_v6")
+    print("model_v8")
