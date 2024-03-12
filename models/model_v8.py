@@ -1,4 +1,5 @@
 from torchinfo import summary
+import io
 import numpy as np
 from prep_data import choose_cuda
 import torchvision.transforms.functional as func
@@ -13,7 +14,7 @@ class Model(nn.Module):
         self.depth = depth
         self.Ns = Ns
 
-        self.pe = AddFEncoding(1025)
+        self.pe = AddFreqEncoding(1025)
 
         ksize=(7,7)
         self.paddings_1=get_paddings(ksize)
@@ -165,25 +166,22 @@ class Unet(nn.Module):
 
         return self.final_conv(x)
 
-class AddFEncoding(nn.Module):
+class AddFreqEncoding(nn.Module):
     def __init__(self, f_dim):
-        super(AddFEncoding, self).__init__()
-        pi = torch.tensor(np.pi)
-        pi = pi.to(torch.float32)
+        super(AddFreqEncoding, self).__init__()
         self.f_dim = f_dim
-        n = torch.arange(f_dim,dtype=torch.float32)/(f_dim-1)
-        coss = torch.cos(pi*n)
-        f_channel = coss.unsqueeze(0)
-        self.fembeddings = f_channel
-        for k in range(1,10):
-            coss = torch.cos(2**k*pi*n)
-            f_channel = coss.unsqueeze(0)
-            self.fembeddings = torch.cat([self.fembeddings,f_channel],dim=0)
+        pi = torch.pi
+        n = torch.arange(f_dim, dtype=torch.float32) / (f_dim - 1)
+        coss = torch.cos(pi * n)
+        f_channel = torch.unsqueeze(coss, dim=-1)
+        self.fembeddings = torch.cat([f_channel] + [torch.cos(2 ** k * pi * n).unsqueeze(-1) for k in range(1, 10)], dim=-1)
 
     def forward(self, input_tensor):
-        batch_size_tensor = input_tensor.size(0)
-        time_dim = input_tensor.size(3)
-        fembeddings_2 = self.fembeddings.expand(batch_size_tensor, 10, self.f_dim, time_dim)
+        batch_size, _, freq_dim, time_dim = input_tensor.shape
+        fembeddings_2 = torch.transpose(self.fembeddings, 0, 1)
+        fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=0)
+        fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=-1)
+        fembeddings_2 = fembeddings_2.expand(batch_size, 10, freq_dim, time_dim)
         return torch.cat([input_tensor, fembeddings_2], dim=1)
 
 
@@ -195,11 +193,10 @@ if __name__ == "__main__":
     #net_depth = 7
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
     net_depth = 4
-    Ns_unet_2 = [14, 16, 32, 64, 128, 256, 512]
     activation = nn.ELU()
     cuda_num = 0
     device = choose_cuda(cuda_num)
-    model = Model(net_depth, Ns, activation).to(device)  #
+    model = Model(net_depth, Ns, activation).to(device)
 
     # # --- Print model summary ---
     print(f"\n")
