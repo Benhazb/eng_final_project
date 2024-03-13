@@ -39,7 +39,7 @@ class TrainClass:
             if 'with_pe' not in self.arch_name:
                 self.model = model_v7.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
             else:
-                self.model = model_v8.Model(self.unet_depth, self.Ns, self.activation).to(self.device)
+                self.model = model_v8.Model(self.unet_depth, self.Ns, self.activation, self.device).to(self.device)
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-05)
         self.short_run = short_run
         self.check_points = check_points
@@ -497,7 +497,7 @@ if __name__ == "__main__":
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
-    cuda_num = 3
+    cuda_num = 1
     batch_size = 16
     num_workers = 9
     unet_depth = 6

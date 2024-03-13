@@ -181,8 +181,6 @@ class AddFreqEncoding(nn.Module):
         fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=0)
         fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=-1)
         fembeddings_2 = fembeddings_2.expand(batch_size, 10, freq_dim, time_dim)
-        print(input_tensor.device)
-        print(fembeddings_2.device)
         return torch.cat([input_tensor, fembeddings_2], dim=1)
 
 def get_paddings(K):
