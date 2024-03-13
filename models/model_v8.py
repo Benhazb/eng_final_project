@@ -1,18 +1,17 @@
 from torchinfo import summary
-import io
-import numpy as np
 from prep_data import choose_cuda
 import torchvision.transforms.functional as func
 import torch
 from torch import nn
 
 class Model(nn.Module):
-    def __init__(self, depth, Ns, activation):
+    def __init__(self, depth, Ns, activation, device):
         super().__init__()
         print('model_v8')
         self.activation = activation
         self.depth = depth
         self.Ns = Ns
+        self.device = device
 
         self.pe = AddFreqEncoding(1025)
 
@@ -87,7 +86,7 @@ class Model(nn.Module):
 
 
     def forward(self, x):
-        x_frq = self.pe(x)
+        x_frq = self.pe(x, self.device)
         F_in_1 = self.conv2d_1(x_frq)
         F_out_1 = self.unet_1(F_in_1)
         est_noise1 = self.conv2d_2(F_out_1)
@@ -176,14 +175,15 @@ class AddFreqEncoding(nn.Module):
         f_channel = torch.unsqueeze(coss, dim=-1)
         self.fembeddings = torch.cat([f_channel] + [torch.cos(2 ** k * pi * n).unsqueeze(-1) for k in range(1, 10)], dim=-1)
 
-    def forward(self, input_tensor):
+    def forward(self, input_tensor, device):
         batch_size, _, freq_dim, time_dim = input_tensor.shape
-        fembeddings_2 = torch.transpose(self.fembeddings, 0, 1)
+        fembeddings_2 = torch.transpose(self.fembeddings, 0, 1).to(device)
         fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=0)
         fembeddings_2 = torch.unsqueeze(fembeddings_2, dim=-1)
         fembeddings_2 = fembeddings_2.expand(batch_size, 10, freq_dim, time_dim)
+        print(input_tensor.device)
+        print(fembeddings_2.device)
         return torch.cat([input_tensor, fembeddings_2], dim=1)
-
 
 def get_paddings(K):
     #return (K[0]//2, K[0]//2 -(1- K[0]%2), K[1]//2, K[1]//2 -(1- K[1]%2), 0 ,0, 0, 0)
@@ -196,12 +196,12 @@ if __name__ == "__main__":
     activation = nn.ELU()
     cuda_num = 0
     device = choose_cuda(cuda_num)
-    model = Model(net_depth, Ns, activation).to(device)
+    model = Model(net_depth, Ns, activation, device).to(device)
 
     # # --- Print model summary ---
     print(f"\n")
 
     col_names = ["input_size", "output_size", "num_params"]
     with torch.cuda.device(device):
-        summary(model, input_size=[16,2,1025,215], col_names=col_names)  # set input_size to tuple for [audio, video]
+        summary(model, input_size=[16,2,1025,215], col_names=col_names)
     print("model_v8")
