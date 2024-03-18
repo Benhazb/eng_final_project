@@ -7,6 +7,7 @@ sys.path.append('/home/dsi/hazbanb/project/git/models')
 import model_v6
 import model_v4
 import model_v7
+import model_v8
 from torch import nn
 from reconstruction import Reconstruct
 import os
@@ -25,16 +26,20 @@ class LoadRecon:
         self.wav_files_dir = self.create_wav_dirs()
 
     def gen_model(self, unet_depth, Ns, activation, cuda_num):
+        # connect to GPU
+        self.device = choose_cuda(cuda_num)
+
         if "2_level_unet_nc" in self.arch_name:
             self.model = model_v6.Model(unet_depth, Ns, activation)
         elif ("2_level_unet_nn" in self.arch_name) or ("2_level_unet_2n2c" in self.arch_name) or ("2_level_unet_cc" in self.arch_name):
-            self.model = model_v7.Model(unet_depth, Ns, activation)
+            if 'with_pe' in self.arch_name:
+                self.model = model_v8.Model(unet_depth, Ns, activation, self.device)
+            else:
+                self.model = model_v7.Model(unet_depth, Ns, activation)
         else:
             self.model = model_v4.Model(unet_depth, Ns, activation)
         checkpoint = torch.load(os.path.join(self.run_dir, self.tar_name))
         self.model.load_state_dict(checkpoint['model'])
-        # connect to GPU
-        self.device = choose_cuda(cuda_num)
         # move model to device
         self.model.to(self.device)
 
@@ -227,12 +232,12 @@ class LoadRecon:
 #############################################################################################################
 
 if __name__ == "__main__":
-    cuda_num = 1
+    cuda_num = 2
     unet_depth = 6
     activation = nn.ELU()
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
-    arch_name = "2_level_unet_nn"
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-16 17:18:08.884059_2_level_unet_nn_model_30epochs_depth_512channels_batch16'
+    arch_name = "2_level_unet_2n2c_with_pe"
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2024-03-14 01:18:33.320739_2_level_unet_2n2c_with_pe_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     recon_dataloader = []
     for root, _, files in os.walk('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split'):
@@ -243,7 +248,7 @@ if __name__ == "__main__":
     # transfer in the model again
     trans_num = 20
 
-    snr_list = ['0', '3', '6', '9', '12']
+    snr_list = ['0', '3', '6', '9']
     check_recon = LoadRecon(cuda_num, unet_depth, activation, Ns, arch_name, run_dir, tar_name, recon_dataloader, trans_num, snr_list)
     for snr in snr_list:
         check_recon.back_to_wav(snr)
