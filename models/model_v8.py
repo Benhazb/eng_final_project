@@ -90,7 +90,7 @@ class Model(nn.Module):
         F_in_1 = self.conv2d_1(x_frq)
         F_out_1 = self.unet_1(F_in_1)
         est_noise1 = self.conv2d_2(F_out_1)
-        Y1 = torch.add(x, est_noise1)
+        Y1 = torch.sub(x, est_noise1)
         M0 = self.conv2d_4(F_out_1)
         M1 = self.conv2d_3(Y1)
         M1 = torch.sigmoid(M1)
@@ -100,7 +100,7 @@ class Model(nn.Module):
         F_in_2 = torch.concat([F_sam,F_in_2], dim=1)
         F_out_2 = self.unet_2(F_in_2)
         est_noise2 = self.conv2d_5(F_out_2)
-        Y2 = torch.add(x, est_noise2)
+        Y2 = torch.sub(x, est_noise2)
         return Y1, Y2, est_noise1, est_noise2
 
 class DoubleConv(nn.Module):
