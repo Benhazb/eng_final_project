@@ -497,7 +497,7 @@ if __name__ == "__main__":
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
-    cuda_num = 1
+    cuda_num = 5
     batch_size = 16
     num_workers = 9
     unet_depth = 6
