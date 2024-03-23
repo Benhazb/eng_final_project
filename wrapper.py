@@ -6,12 +6,13 @@ sys.path.append('/home/dsi/hazbanb/project/git/models')
 import model_v6
 import model_v4
 import model_v7
+import model_v8
 from torch import nn
 from reconstruction import Reconstruct
 import os
 
 class wrapper():
-    def __init__(self, unet_depth, activation, Ns, run_dir, tar_name, input_file,  wind_size, hop_size, samples_per_seg, overlap, device, output_dir):
+    def __init__(self, unet_depth, activation, Ns, run_dir, tar_name, input_file,  wind_size, hop_size, samples_per_seg, overlap, device, rep):
         self.run_dir = run_dir
         self.tar_name = tar_name
         self.activation = activation
@@ -24,15 +25,19 @@ class wrapper():
         self.wind = torch.hann_window(self.wind_size, device=self.device)
         self.seg_list = []
         self.gen_model(unet_depth, Ns, self.activation)
-        self.output_dir = output_dir
         self.creat_output_dir(self.input.split('/')[-1].split('.wav')[0])
+        self.rep = rep
 
     def creat_output_dir(self, name):
-        self.path = os.path.join(self.output_dir, name)
+        results = os.path.join(self.run_dir,'full_songs')
+        if not os.path.isdir(results):
+            os.mkdir(results)
+        self.path = os.path.join(results, name)
         if not os.path.exists(self.path):
             os.mkdir(self.path)
-    def split_n_stft(self):
-        self.x, fs = torchaudio.load(self.input)
+    def split_n_stft(self, input):
+        self.seg_list = []
+        self.x, fs = torchaudio.load(input)
         x = self.x.to(self.device)
         if x.dim() > 1:
             x = torch.mean(x, dim=0)
@@ -66,7 +71,10 @@ class wrapper():
         if "2_level_unet_nc" in self.run_dir:
             self.model = model_v6.Model(unet_depth, Ns, activation)
         elif ("2_level_unet_nn" in self.run_dir) or ("2_level_unet_2n2c" in self.run_dir) or ("2_level_unet_cc" in self.run_dir):
-            self.model = model_v7.Model(unet_depth, Ns, activation)
+            if 'with_pe' in self.run_dir:
+                self.model = model_v8.Model(unet_depth, Ns, activation, self.device)
+            else:
+                self.model = model_v7.Model(unet_depth, Ns, activation)
         else:
             self.model = model_v4.Model(unet_depth, Ns, activation)
         checkpoint = torch.load(os.path.join(self.run_dir, self.tar_name))
@@ -74,7 +82,7 @@ class wrapper():
         # move model to device
         self.model.to(self.device)
 
-    def through_the_model(self):
+    def through_the_model(self, rep):
         self.reconstruct = Reconstruct(self.device)
         with torch.no_grad():
             for idx, noise_segment in enumerate(self.seg_list):
@@ -96,10 +104,10 @@ class wrapper():
                         y2_final = torch.cat((y2_final, recon_wav_y2[109568:]), dim=0)
                         n1_final = torch.cat((n1_final, recon_wav_est_noise[109568:]), dim=0)
                     if idx == (len(self.seg_list)-1):
-                        self.save_final_wav(self.x, 'clean.wav')
-                        self.save_final_wav(y1_final, 'y1.wav')
-                        self.save_final_wav(y2_final, 'y2.wav')
-                        self.save_final_wav(n1_final, 'n1.wav')
+                        self.save_final_wav(self.x, 'org.wav')
+                        self.save_final_wav(y1_final, f'y1_{rep}.wav')
+                        self.save_final_wav(y2_final, f'y2_{rep}.wav')
+                        self.save_final_wav(n1_final, f'n1_{rep}.wav')
                 elif ("2_level_unet_nn" in self.run_dir) or ("2_level_unet_2n2c" in self.run_dir) or ("2_level_unet_cc" in self.run_dir):
                     y1, y2, est_noise1, est_noise2 = self.model(noise_segment)
                     recon_wav_y1 = self.stft_from_model_to_wav(y1)
@@ -118,11 +126,11 @@ class wrapper():
                         n2_final = torch.cat((n2_final, recon_wav_est_noise2[109568:]), dim=0)
                     if idx == (len(self.seg_list) - 1):
                         torchaudio.save(os.path.join(self.path, 'org.wav'), self.x, 44100)
-                        self.save_final_wav(y1_final, 'y1.wav')
-                        self.save_final_wav(y2_final, 'y2.wav')
-                        self.save_final_wav(n1_final, 'n1.wav')
-                        self.save_final_wav(n2_final, 'n2.wav')
-        return y2_final
+                        self.save_final_wav(y1_final, f'y1_{rep}.wav')
+                        self.save_final_wav(y2_final, f'y2_{rep}.wav')
+                        self.save_final_wav(n1_final, f'n1_{rep}.wav')
+                        self.save_final_wav(n2_final, f'n2_{rep}.wav')
+        return os.path.join(self.path, f'y2_{rep}.wav')
 
     def stft_from_model_to_wav(self, stft):
         stft = torch.permute(stft, (0, 2, 3, 1))
@@ -149,11 +157,14 @@ if __name__ == "__main__":
     hop_size = 1024
     samples_per_sec = 219136  # ~5 sec
     overlap = 0.5  # 50% overlap for more data
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2024-03-14 01:18:33.320739_2_level_unet_2n2c_with_pe_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
     input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1819.wav'
-    output_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/test'
-    wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device, output_dir)
-    wrap.split_n_stft()
-    recon = wrap.through_the_model()
-    full_segmented_song = wrap.seg_list
+    rep = 5
+    wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device, rep)
+    wrap.split_n_stft(wrap.input)
+    recon = wrap.through_the_model(f'rep{str(6-rep)}')
+    while(rep>1):
+        rep -= 1
+        wrap.split_n_stft(recon)
+        recon = wrap.through_the_model(f'rep{str(6-rep)}')
