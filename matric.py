@@ -263,14 +263,14 @@ class LoadRecon:
 #############################################################################################################
 
 if __name__ == "__main__":
-    cuda_num = 5
+    cuda_num = 1
     unet_depth = 6
     activation = nn.ELU()
     snr_list = ['-3','0','3','6','9','12','15']
     Ns = [4, 8, 16, 32, 64, 128, 256, 512]
     arch_name = "2_level_unet_2n2c_with_pe"
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2024-03-14 01:18:33.320739_2_level_unet_2n2c_with_pe_model_30epochs_depth_512channels_batch16'
-    tar_name = 'FinalModel.tar'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2024-03-18 20:43:41.410403_2_level_unet_2n2c_with_pe_model_30epochs_depth_512channels_batch16'
+    tar_name = '25_epochs_checkpoint.tar'
     peaq_flag = 0
     recon_dataloader = []
     for root, _, files in os.walk('/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data_split'):

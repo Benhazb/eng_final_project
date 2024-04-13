@@ -111,7 +111,10 @@ class TrainClass:
             self.test_losses[test_dataloader] = []
             test_loss = self.test(test_dataloader)
             self.test_losses[test_dataloader].append(test_loss)
-        self.prep_output_files()
+        filename = f"FinalModel"
+        model_tar_path = f'{self.full_path}/{filename}'
+        self.save_model(model_tar_path)
+        # self.prep_output_files()
 
     def train_epoch(self, epoch):
         # Set train mode for both the encoder and the decoder
@@ -497,7 +500,7 @@ if __name__ == "__main__":
     print(num_epochs)
     lr = 0.001
     #torch.manual_seed(0)
-    cuda_num = 5
+    cuda_num = 1
     batch_size = 16
     num_workers = 9
     unet_depth = 6
@@ -510,7 +513,7 @@ if __name__ == "__main__":
     arch_name = "2_level_unet_2n2c_with_pe"
     print(f'{arch_name=}')
     output_path = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new'
-    loss_weights = {'y1': 1, 'y2': 20, 'n1': 1, 'n2': 1}
+    loss_weights = {'y1': 1, 'y2': 1, 'n1': 1, 'n2': 1}
 
     short_run = 0     # 0 - full run, else stop after {short_run} batches
     check_points = 5  # 0 - no checkpoint, else save the model each {check_points} epochs

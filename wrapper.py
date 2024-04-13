@@ -25,7 +25,7 @@ class wrapper():
         self.wind = torch.hann_window(self.wind_size, device=self.device)
         self.seg_list = []
         self.gen_model(unet_depth, Ns, self.activation)
-        self.creat_output_dir(self.input.split('/')[-1].split('.wav')[0])
+        self.creat_output_dir(self.input.split('/')[-1].split('.wav')[0].split('.mp3')[0])
         self.rep = rep
 
     def creat_output_dir(self, name):
@@ -159,9 +159,9 @@ if __name__ == "__main__":
     hop_size = 1024
     samples_per_sec = 219136  # ~5 sec
     overlap = 0.5  # 50% overlap for more data
-    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2024-03-14 01:18:33.320739_2_level_unet_2n2c_with_pe_model_30epochs_depth_512channels_batch16'
+    run_dir = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/outputs_new/2023-08-17 02:17:44.150340_2_level_unet_2n2c_model_30epochs_depth_512channels_batch16'
     tar_name = 'FinalModel.tar'
-    input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1819.wav'
+    input_file = '/dsi/scratch/from_netapp/users/hazbanb/dataset/musicnet/test_data/1000.mp3'
     rep = 5
     wrap = wrapper(unet_depth, activation, Ns, run_dir, tar_name, input_file, n_window, hop_size, samples_per_sec, overlap, device, rep)
     wrap.split_n_stft(wrap.input)
